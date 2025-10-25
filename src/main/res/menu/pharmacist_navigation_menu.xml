@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_pharmacist_dashboard"
+            android:icon="@drawable/ic_dashboard"
+            android:title="@string/nav_pharmacist_dashboard" />
+
+        <item
+            android:id="@+id/nav_medication_dispensing"
+            android:icon="@drawable/ic_medication_dispensing"
+            android:title="@string/nav_medication_dispensing" />
+
+        <item
+            android:id="@+id/nav_inventory"
+            android:icon="@drawable/ic_inventory"
+            android:title="@string/nav_inventory" />
+
+        <item
+            android:id="@+id/nav_drug_interactions"
+            android:icon="@drawable/ic_drug_interactions"
+            android:title="@string/nav_drug_interactions" />
+
+        <item
+            android:id="@+id/nav_prescription_verification"
+            android:icon="@drawable/ic_prescription_verification"
+            android:title="@string/nav_prescription_verification" />
+    </group>
+
+    <group android:id="@+id/logout_group">
+        <item
+            android:id="@+id/nav_pharmacist_logout"
+            android:icon="@drawable/ic_logout"
+            android:title="@string/nav_logout" />
+    </group>
+
+</menu>
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_nurse_dashboard"
+            android:icon="@drawable/ic_dashboard"
+            android:title="@string/nav_nurse_dashboard" />
+
+        <item
+            android:id="@+id/nav_patient_registration"
+            android:icon="@drawable/ic_patient_registration"
+            android:title="@string/nav_patient_registration" />
+
+        <item
+            android:id="@+id/nav_patient_monitoring"
+            android:icon="@drawable/ic_patient_monitoring"
+            android:title="@string/nav_patient_monitoring" />
+
+        <item
+            android:id="@+id/nav_registered_patients"
+            android:icon="@drawable/ic_patients"
+            android:title="Registered Patients" />
+
+        <item
+            android:id="@+id/nav_view_prescriptions"
+            android:icon="@drawable/ic_prescriptions"
+            android:title="Doctor's Prescriptions" />
+
+        <item
+            android:id="@+id/nav_nurse_profile"
+            android:icon="@drawable/ic_nurse_profile"
+            android:title="@string/nav_nurse_profile" />
+    </group>
+
+    <group android:id="@+id/logout_group">
+        <item
+            android:id="@+id/nav_nurse_logout"
+            android:icon="@drawable/ic_logout"
+            android:title="@string/nav_logout" />
+    </group>
+
+</menu>

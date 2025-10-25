@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_dashboard"
+            android:icon="@drawable/ic_dashboard"
+            android:title="@string/nav_dashboard" />
+
+        <item
+            android:id="@+id/nav_create_employee"
+            android:icon="@drawable/ic_add_user"
+            android:title="@string/nav_create_employee" />
+
+        <item
+            android:id="@+id/nav_manage_employees"
+            android:icon="@drawable/ic_manage_users"
+            android:title="@string/nav_manage_employees" />
+
+        <item
+            android:id="@+id/nav_reports"
+            android:icon="@drawable/ic_reports"
+            android:title="@string/nav_reports" />
+
+        <item
+            android:id="@+id/nav_settings"
+            android:icon="@drawable/ic_settings"
+            android:title="@string/nav_settings" />
+    </group>
+
+    <group android:id="@+id/logout_group">
+        <item
+            android:id="@+id/nav_logout"
+            android:icon="@drawable/ic_logout"
+            android:title="@string/nav_logout" />
+    </group>
+
+</menu>
+
+
+
+
+
+
+
+
+
+

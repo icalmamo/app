@@ -1,0 +1,53 @@
+# Android Development Rules for Cursor
+
+## Project Context
+This is an Android project using Java with the following setup:
+- Package: com.example.h_cas
+- Target SDK: 36, Min SDK: 24
+- Java 11 compatibility
+- Uses AndroidX libraries and Material Design
+- Gradle build system
+
+## Coding Standards
+- Follow Android Java conventions
+- Use meaningful variable and method names
+- Add proper JavaDoc comments for public methods
+- Handle null checks appropriately
+- Use proper Android lifecycle methods
+
+## File Organization
+- Keep activities in the main/java package structure
+- Place layouts in res/layout/
+- Put drawable resources in res/drawable/
+- Store string resources in res/values/strings.xml
+- Use proper resource naming conventions (snake_case)
+
+## Android-Specific Guidelines
+- Always check for null when working with Views
+- Use proper Context handling
+- Implement proper lifecycle management
+- Follow Material Design principles
+- Use ConstraintLayout for complex layouts
+- Handle edge-to-edge display properly
+
+## Build and Development
+- This project uses Gradle for building
+- Use Android Studio for running/debugging
+- Use Cursor for code editing and development
+- Keep build.gradle dependencies up to date
+
+## Common Patterns
+- Use findViewById with proper null checks
+- Implement proper error handling
+- Use proper threading for background tasks
+- Follow Android's recommended architecture patterns
+
+
+
+
+
+
+
+
+
+

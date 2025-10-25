@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_doctor_dashboard"
+            android:icon="@drawable/ic_dashboard"
+            android:title="@string/nav_doctor_dashboard" />
+
+        <item
+            android:id="@+id/nav_registered_patients"
+            android:icon="@drawable/ic_patients"
+            android:title="Registered Patients" />
+
+        <item
+            android:id="@+id/nav_patient_history"
+            android:icon="@drawable/ic_history"
+            android:title="Patient History" />
+
+        <item
+            android:id="@+id/nav_doctor_profile"
+            android:icon="@drawable/ic_doctor_profile"
+            android:title="Doctor's Profile" />
+    </group>
+
+    <group android:id="@+id/logout_group">
+        <item
+            android:id="@+id/nav_doctor_logout"
+            android:icon="@drawable/ic_logout"
+            android:title="@string/nav_logout" />
+    </group>
+
+</menu>

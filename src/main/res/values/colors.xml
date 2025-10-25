@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- Healthcare Theme Colors -->
+    <color name="primary_blue">#1976D2</color>
+    <color name="primary_blue_dark">#1565C0</color>
+    <color name="accent_blue">#2196F3</color>
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="background_light">#FAFAFA</color>
+    <color name="success_green">#4CAF50</color>
+    <color name="error_red">#F44336</color>
+    <color name="warning_orange">#FF9800</color>
+    
+    <!-- Navigation Drawer Colors -->
+    <color name="nav_item_color">#727272</color>
+    <color name="nav_header_subtitle">#B3FFFFFF</color>
+    
+    <!-- Card Border -->
+    <color name="card_border_gray">#E0E0E0</color>
+    
+    <!-- Additional Status Colors -->
+    <color name="accent_green">#4CAF50</color>
+    
+    <!-- Pharmacist Theme Colors -->
+    <color name="pharmacist_primary">#4CAF50</color>
+    <color name="pharmacist_secondary">#388E3C</color>
+</resources>
