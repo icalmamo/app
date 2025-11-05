@@ -11,59 +11,25 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="24dp">
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp">
 
         <!-- Logo Container -->
 
         <!-- Login Form Container -->
-        <LinearLayout
-            android:id="@+id/logoContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="124dp"
-            android:gravity="center"
-            android:orientation="vertical"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintHorizontal_bias="0.0"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
-
-            <ImageView
-                android:id="@+id/logoImageView"
-                android:layout_width="120dp"
-                android:layout_height="120dp"
-                android:contentDescription="@string/er_logo_description"
-                android:scaleType="centerCrop"
-                android:src="@drawable/er" />
-
-            <TextView
-                android:id="@+id/appTitleTextView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="HCAS"
-                android:textColor="@color/primary_blue"
-                android:textSize="28sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/subtitleTextView"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Health Care Assistant System"
-                android:textColor="@color/text_secondary"
-                android:textSize="16sp" />
-
-        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/loginFormContainer"
-            android:layout_width="364dp"
-            android:layout_height="379dp"
-            android:layout_marginTop="88dp"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="124dp"
+            android:layout_marginEnd="16dp"
             android:background="@drawable/login_form_background"
             android:elevation="4dp"
+            android:maxWidth="400dp"
             android:orientation="vertical"
             android:padding="24dp"
             app:layout_constraintEnd_toEndOf="parent"
@@ -125,6 +91,8 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Forgot Password -->
+
+            <!-- Login Button -->
             <TextView
                 android:id="@+id/forgotPasswordTextView"
                 android:layout_width="wrap_content"
@@ -139,7 +107,6 @@
                 android:textColor="@color/primary_blue"
                 android:textSize="14sp" />
 
-            <!-- Login Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/loginButton"
                 android:layout_width="match_parent"
@@ -161,6 +128,47 @@
 
 
             </LinearLayout>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/logoContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="52dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.0"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/logoImageView"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:contentDescription="HCAS Logo"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_hcas_logo" />
+
+            <TextView
+                android:id="@+id/appTitleTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="HCAS"
+                android:textColor="@color/primary_blue"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/subtitleTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Health Care Assistant System"
+                android:textColor="@color/text_secondary"
+                android:textSize="16sp" />
 
         </LinearLayout>
 

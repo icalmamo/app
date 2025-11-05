@@ -5,6 +5,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.util.Log;
 
 import com.example.h_cas.models.Employee;
 
@@ -19,7 +20,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
     // Database information
     private static final String DATABASE_NAME = "hcas_healthcare.db";
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
 
     // Employee table
     private static final String TABLE_EMPLOYEES = "employees";
@@ -33,6 +34,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_PASSWORD = "password";
     private static final String COLUMN_CREATED_DATE = "created_date";
     private static final String COLUMN_IS_ACTIVE = "is_active";
+    private static final String COLUMN_PROFILE_PICTURE_URL = "profile_picture_url";
 
     // Cases table
     private static final String TABLE_CASES = "healthcare_cases";
@@ -122,7 +124,8 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         COLUMN_USERNAME + " TEXT UNIQUE NOT NULL, " +
         COLUMN_PASSWORD + " TEXT NOT NULL, " +
         COLUMN_CREATED_DATE + " DATETIME DEFAULT CURRENT_TIMESTAMP, " +
-        COLUMN_IS_ACTIVE + " INTEGER DEFAULT 1" +
+        COLUMN_IS_ACTIVE + " INTEGER DEFAULT 1, " +
+        COLUMN_PROFILE_PICTURE_URL + " TEXT" +
         ")";
 
     private static final String CREATE_CASES_TABLE = 
@@ -216,8 +219,107 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         COLUMN_PHARMACIST_NAME + " TEXT" +
         ")";
 
+    private Context context;
+    private static FirebaseSyncManager syncManager;
+    private static boolean syncManagerInitializationAttempted = false;
+    
     public HCasDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        this.context = context;
+        
+        // Initialize sync manager only once (prevent circular dependency)
+        // Firebase sync is optional - app works fine without it
+        if (syncManager == null && !syncManagerInitializationAttempted && context != null) {
+            syncManagerInitializationAttempted = true;
+            
+            try {
+                // Check if Firebase is available before initializing
+                try {
+                    com.google.firebase.FirebaseApp.getInstance();
+                    // Initialize sync manager in background thread to avoid blocking
+                    new Thread(() -> {
+                        try {
+                            syncManager = new FirebaseSyncManager(context);
+                            if (syncManager != null) {
+                                Log.d("HCasDatabaseHelper", "FirebaseSyncManager initialized");
+                            }
+                        } catch (Exception e) {
+                            Log.e("HCasDatabaseHelper", "Failed to initialize FirebaseSyncManager", e);
+                            syncManager = null;
+                        }
+                    }).start();
+                } catch (IllegalStateException e) {
+                    // Firebase not available - skip sync initialization
+                    Log.w("HCasDatabaseHelper", "Firebase not available - sync disabled", e);
+                    syncManager = null;
+                } catch (Exception e) {
+                    Log.e("HCasDatabaseHelper", "Failed to check Firebase availability", e);
+                    syncManager = null;
+                }
+            } catch (Exception e) {
+                Log.e("HCasDatabaseHelper", "Error checking Firebase availability", e);
+                syncManager = null;
+            }
+        }
+    }
+    
+    /**
+     * Helper method to sync to Firebase (non-blocking)
+     */
+    private void syncToFirebase(String type, Object data) {
+        Log.d("HCasDatabaseHelper", "🔄 syncToFirebase called for type: " + type);
+        
+        if (syncManager == null) {
+            Log.w("HCasDatabaseHelper", "⚠️ syncManager is null, attempting to initialize...");
+            // Try to initialize sync manager if not already initialized
+            if (context != null) {
+                try {
+                    syncManager = new FirebaseSyncManager(context);
+                    Log.d("HCasDatabaseHelper", "✅ syncManager initialized");
+                } catch (Exception e) {
+                    Log.e("HCasDatabaseHelper", "❌ Failed to initialize syncManager", e);
+                    return;
+                }
+            } else {
+                Log.e("HCasDatabaseHelper", "❌ Context is null, cannot sync");
+                return;
+            }
+        }
+        
+        if (context == null) {
+            Log.e("HCasDatabaseHelper", "❌ Context is null, cannot sync");
+            return;
+        }
+        
+        try {
+            Log.d("HCasDatabaseHelper", "📤 Starting Firebase sync for " + type);
+            // Run sync in background thread to avoid blocking
+            new Thread(() -> {
+                try {
+                    if (data instanceof com.example.h_cas.models.Medicine) {
+                        Log.d("HCasDatabaseHelper", "   Syncing Medicine...");
+                        syncManager.syncMedicine((com.example.h_cas.models.Medicine) data);
+                    } else if (data instanceof com.example.h_cas.models.Prescription) {
+                        Log.d("HCasDatabaseHelper", "   Syncing Prescription...");
+                        syncManager.syncPrescription((com.example.h_cas.models.Prescription) data);
+                    } else if (data instanceof com.example.h_cas.models.Patient) {
+                        Log.d("HCasDatabaseHelper", "   Syncing Patient...");
+                        syncManager.syncPatient((com.example.h_cas.models.Patient) data);
+                    } else if (data instanceof Employee) {
+                        Log.d("HCasDatabaseHelper", "   Syncing Employee...");
+                        syncManager.syncEmployee((Employee) data);
+                    } else {
+                        Log.w("HCasDatabaseHelper", "⚠️ Unknown data type: " + (data != null ? data.getClass().getName() : "null"));
+                    }
+                } catch (Exception e) {
+                    Log.e("HCasDatabaseHelper", "❌ Firebase sync failed for " + type, e);
+                    e.printStackTrace();
+                }
+            }).start();
+        } catch (Exception e) {
+            Log.e("HCasDatabaseHelper", "❌ Error initiating Firebase sync", e);
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -364,6 +466,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                 employee.setPassword(cursor.getString(7));
                 employee.setCreatedDate(cursor.getString(8));
                 employee.setActive(cursor.getInt(9) == 1);
+                // Handle profile picture URL (index 10, may be null for existing records)
+                if (cursor.getColumnCount() > 10 && !cursor.isNull(10)) {
+                    employee.setProfilePictureUrl(cursor.getString(10));
+                }
                 
                 employees.add(employee);
             } while (cursor.moveToNext());
@@ -398,6 +504,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                 employee.setPassword(cursor.getString(7));
                 employee.setCreatedDate(cursor.getString(8));
                 employee.setActive(cursor.getInt(9) == 1);
+                // Handle profile picture URL (index 10, may be null for existing records)
+                if (cursor.getColumnCount() > 10 && !cursor.isNull(10)) {
+                    employee.setProfilePictureUrl(cursor.getString(10));
+                }
                 
                 employees.add(employee);
             } while (cursor.moveToNext());
@@ -439,6 +549,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             employee.setPassword(cursor.getString(7));
             employee.setCreatedDate(cursor.getString(8));
             employee.setActive(cursor.getInt(9) == 1);
+            // Handle profile picture URL (index 10, may be null for existing records)
+            if (cursor.getColumnCount() > 10 && !cursor.isNull(10)) {
+                employee.setProfilePictureUrl(cursor.getString(10));
+            }
             
             System.out.println("DEBUG: Employee role: " + employee.getRole());
             System.out.println("DEBUG: Employee active: " + employee.isActive());
@@ -571,19 +685,43 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Get today's cases count (placeholder for future implementation)
+     * Get today's cases count - returns total number of patients (total cases)
      */
     public int getTodaysCasesCount() {
-        // This would be implemented when cases functionality is added
-        return 0;
+        String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS;
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(query, null);
+        
+        int count = 0;
+        if (cursor.moveToFirst()) {
+            count = cursor.getInt(0);
+        }
+        
+        cursor.close();
+        db.close();
+        return count;
     }
 
     /**
-     * Get pending reviews count (placeholder for future implementation)
+     * Get pending reviews count - returns count of patients who don't have prescriptions yet
      */
     public int getPendingReviewsCount() {
-        // This would be implemented when reviews functionality is added
-        return 0;
+        // Get patients who don't have any prescriptions
+        // Count patients where patient_id doesn't exist in prescriptions table
+        String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS + " WHERE " + COLUMN_PATIENT_ID + 
+                      " NOT IN (SELECT DISTINCT patient_id FROM " + TABLE_PRESCRIPTIONS + " WHERE patient_id IS NOT NULL)";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(query, null);
+        
+        int count = 0;
+        if (cursor.moveToFirst()) {
+            count = cursor.getInt(0);
+        }
+        
+        cursor.close();
+        db.close();
+        return count;
     }
 
     /**
@@ -601,7 +739,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Get employee by username
+     * Get employee by username (including admin)
      */
     public Employee getEmployeeByUsername(String username) {
         SQLiteDatabase db = this.getReadableDatabase();
@@ -622,6 +760,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             employee.setPassword(cursor.getString(7));
             employee.setCreatedDate(cursor.getString(8));
             employee.setActive(cursor.getInt(9) == 1);
+            // Handle profile picture URL (index 10, may be null for existing records)
+            if (cursor.getColumnCount() > 10 && !cursor.isNull(10)) {
+                employee.setProfilePictureUrl(cursor.getString(10));
+            }
         }
         
         cursor.close();
@@ -657,9 +799,60 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_ROLE, employee.getRole());
         values.put(COLUMN_USERNAME, employee.getUsername());
         values.put(COLUMN_PASSWORD, employee.getPassword());
+        if (employee.getProfilePictureUrl() != null) {
+            values.put(COLUMN_PROFILE_PICTURE_URL, employee.getProfilePictureUrl());
+        }
         
         int result = db.update(TABLE_EMPLOYEES, values, COLUMN_EMPLOYEE_ID + " = ?", 
                              new String[]{employee.getEmployeeId()});
+        db.close();
+        
+        return result > 0;
+    }
+    
+    /**
+     * Get employee by employee ID (including admin)
+     */
+    public Employee getEmployeeById(String employeeId) {
+        String query = "SELECT * FROM " + TABLE_EMPLOYEES + " WHERE " + COLUMN_EMPLOYEE_ID + " = ?";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(query, new String[]{employeeId});
+        
+        Employee employee = null;
+        if (cursor.moveToFirst()) {
+            employee = new Employee();
+            employee.setEmployeeId(cursor.getString(0));
+            employee.setFirstName(cursor.getString(1));
+            employee.setLastName(cursor.getString(2));
+            employee.setEmail(cursor.getString(3));
+            employee.setPhone(cursor.getString(4));
+            employee.setRole(cursor.getString(5));
+            employee.setUsername(cursor.getString(6));
+            employee.setPassword(cursor.getString(7));
+            employee.setCreatedDate(cursor.getString(8));
+            employee.setActive(cursor.getInt(9) == 1);
+            // Handle profile picture URL (index 10, may be null for existing records)
+            if (cursor.getColumnCount() > 10 && !cursor.isNull(10)) {
+                employee.setProfilePictureUrl(cursor.getString(10));
+            }
+        }
+        
+        cursor.close();
+        db.close();
+        return employee;
+    }
+    
+    /**
+     * Update employee profile picture URL
+     */
+    public boolean updateEmployeeProfilePicture(String employeeId, String profilePictureUrl) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_PROFILE_PICTURE_URL, profilePictureUrl);
+        
+        int result = db.update(TABLE_EMPLOYEES, values, COLUMN_EMPLOYEE_ID + " = ?", 
+                             new String[]{employeeId});
         db.close();
         
         return result > 0;
@@ -706,6 +899,12 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
         long result = db.insert(TABLE_PATIENTS, null, values);
         db.close();
+        
+        // Sync to Firebase if successful
+        if (result != -1) {
+            syncToFirebase("patient", patient);
+        }
+        
         return result != -1;
     }
 
@@ -734,6 +933,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                 patient.setEmail(cursor.getString(7));
                 patient.setEmergencyContactName(cursor.getString(8));
                 patient.setEmergencyContactPhone(cursor.getString(9));
+                patient.setCreatedDate(cursor.getString(10)); // created_date column
                 
                 // Extended patient information (new columns)
                 if (cursor.getColumnCount() > 10) {
@@ -804,9 +1004,76 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         long result = db.insert(TABLE_PRESCRIPTIONS, null, values);
         db.close();
         
+        // Sync to Firebase if successful
+        if (result != -1) {
+            syncToFirebase("prescription", prescription);
+        }
+        
         return result != -1;
     }
 
+    /**
+     * Get prescription by ID
+     */
+    public com.example.h_cas.models.Prescription getPrescriptionById(String prescriptionId) {
+        String query = "SELECT * FROM " + TABLE_PRESCRIPTIONS + " WHERE " + COLUMN_PRESCRIPTION_ID + " = ?";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery(query, new String[]{prescriptionId});
+        
+        com.example.h_cas.models.Prescription prescription = null;
+        if (cursor.moveToFirst()) {
+            prescription = new com.example.h_cas.models.Prescription();
+            prescription.setPrescriptionId(cursor.getString(0));
+            prescription.setPatientId(cursor.getString(1));
+            prescription.setPatientName(cursor.getString(2));
+            prescription.setMedication(cursor.getString(3));
+            prescription.setDosage(cursor.getString(4));
+            prescription.setFrequency(cursor.getString(5));
+            prescription.setDuration(cursor.getString(6));
+            prescription.setInstructions(cursor.getString(7));
+            prescription.setDoctorId(cursor.getString(8));
+            prescription.setDoctorName(cursor.getString(9));
+            prescription.setCreatedDate(cursor.getString(10));
+            prescription.setStatus(cursor.getString(11));
+        }
+        
+        cursor.close();
+        db.close();
+        return prescription;
+    }
+    
+    /**
+     * Update prescription in database
+     */
+    public boolean updatePrescription(com.example.h_cas.models.Prescription prescription) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        
+        values.put(COLUMN_PATIENT_ID, prescription.getPatientId());
+        values.put(COLUMN_PATIENT_NAME, prescription.getPatientName());
+        values.put(COLUMN_MEDICATION, prescription.getMedication());
+        values.put(COLUMN_DOSAGE, prescription.getDosage());
+        values.put(COLUMN_FREQUENCY, prescription.getFrequency());
+        values.put(COLUMN_DURATION, prescription.getDuration());
+        values.put(COLUMN_INSTRUCTIONS, prescription.getInstructions());
+        values.put(COLUMN_DOCTOR_ID, prescription.getDoctorId());
+        values.put(COLUMN_DOCTOR_NAME, prescription.getDoctorName());
+        values.put(COLUMN_CREATED_DATE, prescription.getCreatedDate());
+        values.put(COLUMN_STATUS, prescription.getStatus());
+        
+        int result = db.update(TABLE_PRESCRIPTIONS, values, COLUMN_PRESCRIPTION_ID + " = ?",
+                              new String[]{prescription.getPrescriptionId()});
+        db.close();
+        
+        // Sync to Firebase if successful
+        if (result > 0) {
+            syncToFirebase("prescription", prescription);
+        }
+        
+        return result > 0;
+    }
+    
     /**
      * Get all prescriptions
      */
@@ -820,18 +1087,18 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         if (cursor.moveToFirst()) {
             do {
                 com.example.h_cas.models.Prescription prescription = new com.example.h_cas.models.Prescription();
-                prescription.setPrescriptionId(cursor.getString(0));
-                prescription.setPatientId(cursor.getString(1));
-                prescription.setPatientName(cursor.getString(2));
-                prescription.setMedication(cursor.getString(3));
-                prescription.setDosage(cursor.getString(4));
-                prescription.setFrequency(cursor.getString(5));
-                prescription.setDuration(cursor.getString(6));
-                prescription.setInstructions(cursor.getString(7));
-                prescription.setDoctorId(cursor.getString(8));
-                prescription.setDoctorName(cursor.getString(9));
-                prescription.setCreatedDate(cursor.getString(10));
-                prescription.setStatus(cursor.getString(11));
+                prescription.setPrescriptionId(cursor.isNull(0) ? null : cursor.getString(0));
+                prescription.setPatientId(cursor.isNull(1) ? null : cursor.getString(1));
+                prescription.setPatientName(cursor.isNull(2) ? null : cursor.getString(2));
+                prescription.setMedication(cursor.isNull(3) ? null : cursor.getString(3));
+                prescription.setDosage(cursor.isNull(4) ? null : cursor.getString(4));
+                prescription.setFrequency(cursor.isNull(5) ? null : cursor.getString(5));
+                prescription.setDuration(cursor.isNull(6) ? null : cursor.getString(6));
+                prescription.setInstructions(cursor.isNull(7) ? null : cursor.getString(7));
+                prescription.setDoctorId(cursor.isNull(8) ? null : cursor.getString(8));
+                prescription.setDoctorName(cursor.isNull(9) ? null : cursor.getString(9));
+                prescription.setCreatedDate(cursor.isNull(10) ? null : cursor.getString(10));
+                prescription.setStatus(cursor.isNull(11) ? null : cursor.getString(11));
                 
                 prescriptions.add(prescription);
             } while (cursor.moveToNext());
@@ -1130,6 +1397,11 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                              new String[]{patient.getPatientId()});
         db.close();
         
+        // Sync to Firebase if successful
+        if (result > 0) {
+            syncToFirebase("patient", patient);
+        }
+        
         return result > 0;
     }
 
@@ -1172,16 +1444,16 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         if (cursor.moveToFirst()) {
             do {
                 com.example.h_cas.models.Medicine medicine = new com.example.h_cas.models.Medicine();
-                medicine.setMedicineId(cursor.getString(0));
-                medicine.setMedicineName(cursor.getString(1));
-                medicine.setDosage(cursor.getString(2));
-                medicine.setStockQuantity(cursor.getInt(3));
-                medicine.setUnit(cursor.getString(4));
-                medicine.setCategory(cursor.getString(5));
-                medicine.setDescription(cursor.getString(6));
-                medicine.setExpiryDate(cursor.getString(7));
-                medicine.setPrice(cursor.getDouble(8));
-                medicine.setSupplier(cursor.getString(9));
+                medicine.setMedicineId(cursor.isNull(0) ? null : cursor.getString(0));
+                medicine.setMedicineName(cursor.isNull(1) ? null : cursor.getString(1));
+                medicine.setDosage(cursor.isNull(2) ? null : cursor.getString(2));
+                medicine.setStockQuantity(cursor.isNull(3) ? 0 : cursor.getInt(3));
+                medicine.setUnit(cursor.isNull(4) ? null : cursor.getString(4));
+                medicine.setCategory(cursor.isNull(5) ? null : cursor.getString(5));
+                medicine.setDescription(cursor.isNull(6) ? null : cursor.getString(6));
+                medicine.setExpiryDate(cursor.isNull(7) ? null : cursor.getString(7));
+                medicine.setPrice(cursor.isNull(8) ? 0.0 : cursor.getDouble(8));
+                medicine.setSupplier(cursor.isNull(9) ? null : cursor.getString(9));
                 
                 medicines.add(medicine);
             } while (cursor.moveToNext());
@@ -1206,16 +1478,16 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         if (cursor.moveToFirst()) {
             do {
                 com.example.h_cas.models.Medicine medicine = new com.example.h_cas.models.Medicine();
-                medicine.setMedicineId(cursor.getString(0));
-                medicine.setMedicineName(cursor.getString(1));
-                medicine.setDosage(cursor.getString(2));
-                medicine.setStockQuantity(cursor.getInt(3));
-                medicine.setUnit(cursor.getString(4));
-                medicine.setCategory(cursor.getString(5));
-                medicine.setDescription(cursor.getString(6));
-                medicine.setExpiryDate(cursor.getString(7));
-                medicine.setPrice(cursor.getDouble(8));
-                medicine.setSupplier(cursor.getString(9));
+                medicine.setMedicineId(cursor.isNull(0) ? null : cursor.getString(0));
+                medicine.setMedicineName(cursor.isNull(1) ? null : cursor.getString(1));
+                medicine.setDosage(cursor.isNull(2) ? null : cursor.getString(2));
+                medicine.setStockQuantity(cursor.isNull(3) ? 0 : cursor.getInt(3));
+                medicine.setUnit(cursor.isNull(4) ? null : cursor.getString(4));
+                medicine.setCategory(cursor.isNull(5) ? null : cursor.getString(5));
+                medicine.setDescription(cursor.isNull(6) ? null : cursor.getString(6));
+                medicine.setExpiryDate(cursor.isNull(7) ? null : cursor.getString(7));
+                medicine.setPrice(cursor.isNull(8) ? 0.0 : cursor.getDouble(8));
+                medicine.setSupplier(cursor.isNull(9) ? null : cursor.getString(9));
                 
                 medicines.add(medicine);
             } while (cursor.moveToNext());
@@ -1241,16 +1513,16 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         if (cursor.moveToFirst()) {
             do {
                 com.example.h_cas.models.Medicine medicine = new com.example.h_cas.models.Medicine();
-                medicine.setMedicineId(cursor.getString(0));
-                medicine.setMedicineName(cursor.getString(1));
-                medicine.setDosage(cursor.getString(2));
-                medicine.setStockQuantity(cursor.getInt(3));
-                medicine.setUnit(cursor.getString(4));
-                medicine.setCategory(cursor.getString(5));
-                medicine.setDescription(cursor.getString(6));
-                medicine.setExpiryDate(cursor.getString(7));
-                medicine.setPrice(cursor.getDouble(8));
-                medicine.setSupplier(cursor.getString(9));
+                medicine.setMedicineId(cursor.isNull(0) ? null : cursor.getString(0));
+                medicine.setMedicineName(cursor.isNull(1) ? null : cursor.getString(1));
+                medicine.setDosage(cursor.isNull(2) ? null : cursor.getString(2));
+                medicine.setStockQuantity(cursor.isNull(3) ? 0 : cursor.getInt(3));
+                medicine.setUnit(cursor.isNull(4) ? null : cursor.getString(4));
+                medicine.setCategory(cursor.isNull(5) ? null : cursor.getString(5));
+                medicine.setDescription(cursor.isNull(6) ? null : cursor.getString(6));
+                medicine.setExpiryDate(cursor.isNull(7) ? null : cursor.getString(7));
+                medicine.setPrice(cursor.isNull(8) ? 0.0 : cursor.getDouble(8));
+                medicine.setSupplier(cursor.isNull(9) ? null : cursor.getString(9));
                 
                 medicines.add(medicine);
             } while (cursor.moveToNext());
@@ -1263,6 +1535,9 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
     /**
      * Update medicine information
+     */
+    /**
+     * Update medicine in database and sync to Firebase
      */
     public boolean updateMedicine(com.example.h_cas.models.Medicine medicine) {
         SQLiteDatabase db = this.getWritableDatabase();
@@ -1281,6 +1556,11 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         int result = db.update(TABLE_MEDICINES, values, COLUMN_MEDICINE_ID + " = ?",
                               new String[]{medicine.getMedicineId()});
         db.close();
+        
+        // Sync to Firebase if successful
+        if (result > 0) {
+            syncToFirebase("medicine", medicine);
+        }
         
         return result > 0;
     }

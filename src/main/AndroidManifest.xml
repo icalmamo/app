@@ -2,11 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Internet permission for Firebase -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    
     <!-- NFC permissions for RFID functionality -->
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
     <application
+        android:name=".HCasApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -15,17 +20,25 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.H_CAS">
-        <!-- Login Activity - Launcher Activity -->
+        <!-- Splash Activity - Launcher Activity -->
         <activity
-            android:name=".LoginActivity"
+            android:name=".SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.H_CAS.NoActionBar">
+            android:theme="@style/Theme.H_CAS.NoActionBar"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Login Activity -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.H_CAS.NoActionBar"
+            android:screenOrientation="portrait" />
 
         <!-- Main Activity -->
         <activity

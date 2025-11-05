@@ -113,8 +113,21 @@ public class Medicine {
         return stockQuantity > 0;
     }
 
+    /**
+     * Check if medicine is low stock using default threshold (10)
+     * @return true if stock is at or below default threshold
+     */
     public boolean isLowStock() {
-        return stockQuantity <= 10; // Consider low stock if 10 or less
+        return stockQuantity <= 10; // Default threshold
+    }
+
+    /**
+     * Check if medicine is low stock using custom threshold
+     * @param minimumStockQuantity The minimum stock quantity threshold
+     * @return true if stock is at or below the threshold
+     */
+    public boolean isLowStock(int minimumStockQuantity) {
+        return stockQuantity <= minimumStockQuantity;
     }
 
     public void reduceStock(int quantity) {
@@ -138,6 +151,11 @@ public class Medicine {
                 '}';
     }
 }
+
+
+
+
+
 
 
 

@@ -38,6 +38,9 @@ public class Patient {
     // Emergency Contact Information
     private String emergencyContactName;
     private String emergencyContactPhone;
+    
+    // System Information
+    private String createdDate;
 
     public String getPatientId() {
         return patientId;
@@ -238,6 +241,14 @@ public class Patient {
 
     public void setPhone(String phone) {
         this.phoneNumber = phone;
+    }
+
+    public String getCreatedDate() {
+        return createdDate;
+    }
+
+    public void setCreatedDate(String createdDate) {
+        this.createdDate = createdDate;
     }
 }
 

@@ -149,9 +149,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="6dp"
-            android:text="Suppliers"
+            android:text="Disposed"
             android:textSize="12sp"
-            app:icon="@drawable/ic_business"
+            app:icon="@drawable/ic_delete"
             app:iconSize="16dp"
             app:iconPadding="4dp"
             style="@style/Widget.Material3.Button.OutlinedButton" />
@@ -185,6 +185,7 @@
             android:layout_marginBottom="16dp" />
 
         <TextView
+            android:id="@+id/emptyStateTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="No medicines found"
@@ -204,7 +205,3 @@
     </LinearLayout>
 
 </LinearLayout>
-
-
-
-

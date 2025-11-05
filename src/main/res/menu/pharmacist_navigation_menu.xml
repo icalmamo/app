@@ -18,14 +18,19 @@
             android:title="@string/nav_inventory" />
 
         <item
-            android:id="@+id/nav_drug_interactions"
-            android:icon="@drawable/ic_drug_interactions"
-            android:title="@string/nav_drug_interactions" />
+            android:id="@+id/nav_medicine_history"
+            android:icon="@drawable/ic_history"
+            android:title="@string/nav_medicine_history" />
 
         <item
             android:id="@+id/nav_prescription_verification"
             android:icon="@drawable/ic_prescription_verification"
             android:title="@string/nav_prescription_verification" />
+
+        <item
+            android:id="@+id/nav_pharmacist_settings"
+            android:icon="@drawable/ic_settings"
+            android:title="@string/nav_pharmacist_settings" />
     </group>
 
     <group android:id="@+id/logout_group">
@@ -36,12 +41,3 @@
     </group>
 
 </menu>
-
-
-
-
-
-
-
-
-

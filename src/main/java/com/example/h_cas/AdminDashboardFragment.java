@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
@@ -24,6 +25,9 @@ public class AdminDashboardFragment extends Fragment {
 
     private RecyclerView statsRecyclerView;
     private TextView welcomeTextView;
+    private MaterialButton createEmployeeButton;
+    private MaterialButton viewEmployeesButton;
+    private MaterialButton generateReportsButton;
     private HCasDatabaseHelper databaseHelper;
 
     @Nullable
@@ -33,6 +37,7 @@ public class AdminDashboardFragment extends Fragment {
         
         initializeViews(view);
         setupStatsRecyclerView();
+        setupQuickActionButtons();
         
         return view;
     }
@@ -40,9 +45,38 @@ public class AdminDashboardFragment extends Fragment {
     private void initializeViews(View view) {
         statsRecyclerView = view.findViewById(R.id.statsRecyclerView);
         welcomeTextView = view.findViewById(R.id.welcomeTextView);
+        createEmployeeButton = view.findViewById(R.id.createEmployeeButton);
+        viewEmployeesButton = view.findViewById(R.id.viewEmployeesButton);
+        generateReportsButton = view.findViewById(R.id.generateReportsButton);
         
         welcomeTextView.setText("Welcome to H-CAS Admin Dashboard");
         databaseHelper = new HCasDatabaseHelper(getContext());
+    }
+
+    private void setupQuickActionButtons() {
+        // Create New Employee button
+        createEmployeeButton.setOnClickListener(v -> {
+            if (getActivity() instanceof AdminDashboardActivity) {
+                ((AdminDashboardActivity) getActivity()).loadFragment(new CreateEmployeeFragment());
+                ((AdminDashboardActivity) getActivity()).getSupportActionBar().setTitle("Create Employee");
+            }
+        });
+
+        // View All Employees button
+        viewEmployeesButton.setOnClickListener(v -> {
+            if (getActivity() instanceof AdminDashboardActivity) {
+                ((AdminDashboardActivity) getActivity()).loadFragment(new ManageEmployeesFragment());
+                ((AdminDashboardActivity) getActivity()).getSupportActionBar().setTitle("Manage Employees");
+            }
+        });
+
+        // Generate Reports button
+        generateReportsButton.setOnClickListener(v -> {
+            if (getActivity() instanceof AdminDashboardActivity) {
+                ((AdminDashboardActivity) getActivity()).loadFragment(new ReportsFragment());
+                ((AdminDashboardActivity) getActivity()).getSupportActionBar().setTitle("Reports & Analytics");
+            }
+        });
     }
 
     private void setupStatsRecyclerView() {

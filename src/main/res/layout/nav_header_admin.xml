@@ -8,31 +8,65 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <ImageView
-        android:id="@+id/adminAvatarImageView"
-        android:layout_width="80dp"
-        android:layout_height="80dp"
-        android:layout_marginBottom="16dp"
-        android:src="@drawable/ic_admin_avatar"
-        android:background="@drawable/admin_avatar_background"
-        android:scaleType="centerCrop" />
-
-    <TextView
-        android:id="@+id/adminNameTextView"
-        android:layout_width="wrap_content"
+    <!-- Clean horizontal layout for profile and logo -->
+    <RelativeLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text=""
-        android:textColor="@color/white"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:layout_marginBottom="16dp">
 
-    <TextView
-        android:id="@+id/adminRoleTextView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="System Administrator"
-        android:textColor="@color/nav_header_subtitle"
-        android:textSize="14sp" />
+        <!-- Profile Section (Left) -->
+        <LinearLayout
+            android:id="@+id/profileSection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="start"
+            android:layout_alignParentStart="true">
+
+            <!-- Profile Avatar -->
+            <ImageView
+                android:id="@+id/adminAvatarImageView"
+                android:layout_width="68dp"
+                android:layout_height="68dp"
+                android:layout_marginBottom="12dp"
+                android:src="@drawable/ic_admin_avatar"
+                android:background="@drawable/admin_avatar_background"
+                android:scaleType="centerCrop" />
+
+            <!-- Name and Role -->
+            <TextView
+                android:id="@+id/adminNameTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02" />
+
+            <TextView
+                android:id="@+id/adminRoleTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="System Administrator"
+                android:textColor="@color/nav_header_subtitle"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
+        <!-- App Logo - Right Edge -->
+        <ImageView
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_alignParentEnd="true"
+            android:layout_alignTop="@id/profileSection"
+            android:layout_marginEnd="0dp"
+            android:layout_marginTop="0dp"
+            android:contentDescription="HCAS Logo"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_hcas_logo" />
+
+    </RelativeLayout>
 
 </LinearLayout>

@@ -35,3 +35,13 @@ public class DiagnosisFragment extends Fragment {
 
 
 
+
+
+
+
+
+
+
+
+
+

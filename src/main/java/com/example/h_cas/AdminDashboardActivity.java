@@ -1,10 +1,20 @@
 package com.example.h_cas;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
+
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.models.Employee;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -97,9 +107,60 @@ public class AdminDashboardActivity extends AppCompatActivity implements Navigat
         View headerView = navigationView.getHeaderView(0);
         TextView adminNameTextView = headerView.findViewById(R.id.adminNameTextView);
         TextView adminRoleTextView = headerView.findViewById(R.id.adminRoleTextView);
+        ImageView adminAvatarImageView = headerView.findViewById(R.id.adminAvatarImageView);
         
-        adminNameTextView.setText("Healthcare Admin");
-        adminRoleTextView.setText("System Administrator");
+        // Load admin data from database
+        HCasDatabaseHelper databaseHelper = new HCasDatabaseHelper(this);
+        Employee admin = databaseHelper.getEmployeeByUsername("admin");
+        
+        if (admin != null) {
+            adminNameTextView.setText(admin.getFullName());
+            adminRoleTextView.setText(admin.getRole());
+            
+            // Load profile picture if available
+            if (admin.getProfilePictureUrl() != null && !admin.getProfilePictureUrl().isEmpty()) {
+                loadProfilePicture(adminAvatarImageView, admin.getProfilePictureUrl());
+            }
+        } else {
+            adminNameTextView.setText("Healthcare Admin");
+            adminRoleTextView.setText("System Administrator");
+        }
+        
+        // Make header clickable to open profile
+        View profileSection = headerView.findViewById(R.id.profileSection);
+        if (profileSection != null) {
+            profileSection.setOnClickListener(v -> {
+                loadFragment(new AdminProfileFragment());
+                toolbar.setTitle("My Profile");
+                drawerLayout.closeDrawer(GravityCompat.START);
+            });
+        }
+    }
+    
+    /**
+     * Load profile picture from URL
+     */
+    private void loadProfilePicture(ImageView imageView, String imageUrl) {
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            new Thread(() -> {
+                try {
+                    URL url = new URL(imageUrl);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setDoInput(true);
+                    connection.connect();
+                    InputStream input = connection.getInputStream();
+                    Bitmap bitmap = BitmapFactory.decodeStream(input);
+                    
+                    runOnUiThread(() -> {
+                        if (bitmap != null) {
+                            imageView.setImageBitmap(bitmap);
+                        }
+                    });
+                } catch (Exception e) {
+                    // Keep default avatar on error
+                }
+            }).start();
+        }
     }
 
     /**

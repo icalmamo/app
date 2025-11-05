@@ -2,6 +2,7 @@ package com.example.h_cas;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
@@ -45,7 +46,7 @@ public class ReportsFragment extends Fragment {
 
     // UI Components
     private RecyclerView reportsRecyclerView;
-    private TextView emptyStateText;
+    private View emptyStateText;
     private Spinner reportTypeSpinner;
     private Spinner timePeriodSpinner;
     private Spinner patientSpinner;
@@ -86,6 +87,10 @@ public class ReportsFragment extends Fragment {
             setupRecyclerView();
             setupSpinners();
             setupClickListeners();
+            
+            // Show empty state initially (after all views are initialized)
+            updateEmptyState();
+            
             loadInitialData();
             
             return view;
@@ -140,30 +145,56 @@ public class ReportsFragment extends Fragment {
 
     private void setupRecyclerView() {
         try {
+            if (getContext() == null) {
+                return; // Context not available yet
+            }
+            
+            if (reportsRecyclerView == null) {
+                return; // RecyclerView not initialized
+            }
+            
             if (reportItems == null) {
                 reportItems = new ArrayList<>();
             }
+            
             reportAdapter = new ReportAdapter(reportItems);
             reportsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
             reportsRecyclerView.setAdapter(reportAdapter);
+            
+            // Initially show empty state (only if views are initialized)
+            if (emptyStateText != null && reportsRecyclerView != null) {
+                updateEmptyState();
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            Toast.makeText(getContext(), "Error setting up recycler view: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            if (getContext() != null) {
+                Toast.makeText(getContext(), "Error setting up recycler view: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
         }
     }
 
     private void setupSpinners() {
+        if (getContext() == null || reportTypeSpinner == null || 
+            timePeriodSpinner == null || patientSpinner == null) {
+            return; // Context or views not available
+        }
+        
         // Report Type Spinner
         ArrayAdapter<String> reportTypeAdapter = new ArrayAdapter<>(getContext(), 
             android.R.layout.simple_spinner_item, reportTypes);
         reportTypeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         reportTypeSpinner.setAdapter(reportTypeAdapter);
         
+        // Set default selection
+        reportTypeSpinner.setSelection(0, false); // Don't trigger listener on initial selection
+        
         reportTypeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedReportType = reportTypes[position];
-                updatePatientSpinnerVisibility();
+                if (position >= 0 && position < reportTypes.length) {
+                    selectedReportType = reportTypes[position];
+                    updatePatientSpinnerVisibility();
+                }
             }
             
             @Override
@@ -176,26 +207,49 @@ public class ReportsFragment extends Fragment {
         timePeriodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         timePeriodSpinner.setAdapter(timePeriodAdapter);
         
+        // Set default selection
+        timePeriodSpinner.setSelection(0, false); // Don't trigger listener on initial selection
+        
         timePeriodSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedTimePeriod = timePeriods[position];
+                if (position >= 0 && position < timePeriods.length) {
+                    selectedTimePeriod = timePeriods[position];
+                }
             }
             
             @Override
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
+        // Patient Spinner - will be updated after data is loaded
+        updatePatientSpinner();
+    }
+    
+    private void updatePatientSpinner() {
+        if (getContext() == null || patientSpinner == null) {
+            return;
+        }
+        
+        if (patientsList == null || patientsList.isEmpty()) {
+            // Initialize with "All Patients" if list is empty
+            patientsList = new ArrayList<>();
+            patientsList.add("All Patients");
+        }
+        
         // Patient Spinner
         ArrayAdapter<String> patientAdapter = new ArrayAdapter<>(getContext(), 
             android.R.layout.simple_spinner_item, patientsList);
         patientAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         patientSpinner.setAdapter(patientAdapter);
         
+        // Set default selection
+        patientSpinner.setSelection(0, false); // Don't trigger listener on initial selection
+        
         patientSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position < patientsList.size()) {
+                if (position >= 0 && position < patientsList.size()) {
                     selectedPatient = patientsList.get(position);
                 }
             }
@@ -206,71 +260,70 @@ public class ReportsFragment extends Fragment {
     }
 
     private void setupClickListeners() {
-        generateReportButton.setOnClickListener(v -> generateReport());
-        printReportButton.setOnClickListener(v -> printReport());
-        refreshButton.setOnClickListener(v -> loadInitialData());
+        if (generateReportButton != null) {
+            generateReportButton.setOnClickListener(v -> generateReport());
+        }
+        if (printReportButton != null) {
+            printReportButton.setOnClickListener(v -> printReport());
+        }
+        if (refreshButton != null) {
+            refreshButton.setOnClickListener(v -> loadInitialData());
+        }
         
         // Back button functionality
-        ImageButton backButton = getView().findViewById(R.id.backButton);
-        if (backButton != null) {
-            backButton.setOnClickListener(v -> {
-                if (getActivity() instanceof AdminDashboardActivity) {
-                    ((AdminDashboardActivity) getActivity()).loadFragment(new AdminDashboardFragment());
-                    ((AdminDashboardActivity) getActivity()).getSupportActionBar().setTitle("Admin Dashboard");
-                }
-            });
+        if (getView() != null) {
+            ImageButton backButton = getView().findViewById(R.id.backButton);
+            if (backButton != null) {
+                backButton.setOnClickListener(v -> {
+                    if (getActivity() instanceof AdminDashboardActivity) {
+                        ((AdminDashboardActivity) getActivity()).loadFragment(new AdminDashboardFragment());
+                        ((AdminDashboardActivity) getActivity()).getSupportActionBar().setTitle("Admin Dashboard");
+                    }
+                });
+            }
         }
     }
 
     private void loadInitialData() {
         try {
-            // Load all patients
+            if (getContext() == null || patientSpinner == null || databaseHelper == null) {
+                return; // Context or views not available
+            }
+            
+            // Load all patients from database
+            if (allPatients == null) {
+                allPatients = new ArrayList<>();
+            }
+            if (patientsList == null) {
+                patientsList = new ArrayList<>();
+            }
+            
             allPatients.clear();
             patientsList.clear();
             patientsList.add("All Patients");
             
-            // For demo purposes, create sample patients
-            createSamplePatients();
+            // Get real patients from database
+            List<Patient> dbPatients = databaseHelper.getAllPatients();
+            if (dbPatients != null && !dbPatients.isEmpty()) {
+                allPatients.addAll(dbPatients);
+                for (Patient patient : dbPatients) {
+                    String fullName = patient.getFirstName() + " " + patient.getLastName();
+                    String patientId = patient.getPatientId() != null ? patient.getPatientId() : "";
+                    patientsList.add(fullName + " (" + patientId + ")");
+                }
+            }
             
-            // Update patient spinner
-            ArrayAdapter<String> patientAdapter = new ArrayAdapter<>(getContext(), 
-                android.R.layout.simple_spinner_item, patientsList);
-            patientAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-            patientSpinner.setAdapter(patientAdapter);
+            // Update patient spinner with loaded data
+            updatePatientSpinner();
             
             // Generate initial report
             generateReport();
             
-            Toast.makeText(getContext(), "📊 Reports data loaded successfully", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(getContext(), "❌ Error loading reports data: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void createSamplePatients() {
-        // Create sample patients for demo
-        String[][] samplePatients = {
-            {"P001", "Juan", "Dela Cruz", "Male", "35", "Hypertension"},
-            {"P002", "Maria", "Santos", "Female", "28", "Diabetes"},
-            {"P003", "Pedro", "Garcia", "Male", "42", "Heart Disease"},
-            {"P004", "Ana", "Lopez", "Female", "31", "Asthma"},
-            {"P005", "Carlos", "Martinez", "Male", "55", "Arthritis"},
-            {"P006", "Elena", "Rodriguez", "Female", "29", "Migraine"},
-            {"P007", "Miguel", "Hernandez", "Male", "38", "Back Pain"},
-            {"P008", "Sofia", "Gonzalez", "Female", "45", "Depression"}
-        };
-
-        for (String[] patient : samplePatients) {
-            Patient newPatient = new Patient();
-            newPatient.setPatientId(patient[0]);
-            newPatient.setFirstName(patient[1]);
-            newPatient.setLastName(patient[2]);
-            newPatient.setGender(patient[3]);
-            newPatient.setAge(patient[4]);
-            newPatient.setSymptomsDescription(patient[5]);
-            
-            allPatients.add(newPatient);
-            patientsList.add(patient[1] + " " + patient[2] + " (" + patient[0] + ")");
+            e.printStackTrace();
+            if (getContext() != null) {
+                Toast.makeText(getContext(), "❌ Error loading reports data: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
@@ -319,24 +372,39 @@ public class ReportsFragment extends Fragment {
         
         reportItems.add(new ReportItem("REPORT_HEADER", reportTitle, "", "", ""));
         
+        // Filter patients by time period
+        List<Patient> filteredPatients = filterPatientsByTimePeriod(allPatients);
+        
         // Add patient statistics
-        int totalPatients = allPatients.size();
+        int totalPatients = filteredPatients.size();
         int malePatients = 0;
         int femalePatients = 0;
-        int avgAge = 0;
+        int totalAge = 0;
+        int validAgeCount = 0;
         
-        for (Patient patient : allPatients) {
-            if (patient.getGender().equals("Male")) {
-                malePatients++;
-            } else {
-                femalePatients++;
+        for (Patient patient : filteredPatients) {
+            String gender = patient.getGender();
+            if (gender != null) {
+                if (gender.equals("Male") || gender.equalsIgnoreCase("M")) {
+                    malePatients++;
+                } else if (gender.equals("Female") || gender.equalsIgnoreCase("F")) {
+                    femalePatients++;
+                }
             }
-            avgAge += Integer.parseInt(patient.getAge());
+            
+            // Calculate age safely
+            String ageStr = patient.getAge();
+            if (ageStr != null && !ageStr.isEmpty()) {
+                try {
+                    totalAge += Integer.parseInt(ageStr);
+                    validAgeCount++;
+                } catch (NumberFormatException e) {
+                    // Ignore invalid age values
+                }
+            }
         }
         
-        if (totalPatients > 0) {
-            avgAge = avgAge / totalPatients;
-        }
+        int avgAge = validAgeCount > 0 ? totalAge / validAgeCount : 0;
         
         reportItems.add(new ReportItem("STATISTICS", "Patient Statistics", 
             "Total Patients: " + totalPatients, 
@@ -345,69 +413,271 @@ public class ReportsFragment extends Fragment {
         
         // Add individual patient details
         if (selectedPatient.equals("All Patients")) {
-            for (Patient patient : allPatients) {
+            for (Patient patient : filteredPatients) {
+                String name = (patient.getFirstName() != null ? patient.getFirstName() : "") + 
+                             " " + (patient.getLastName() != null ? patient.getLastName() : "");
+                String patientId = patient.getPatientId() != null ? patient.getPatientId() : "N/A";
+                String age = patient.getAge() != null ? patient.getAge() : "N/A";
+                String gender = patient.getGender() != null ? patient.getGender() : "N/A";
+                String condition = patient.getSymptomsDescription() != null ? patient.getSymptomsDescription() : "No condition recorded";
+                
                 reportItems.add(new ReportItem("PATIENT_DETAIL", 
-                    patient.getFirstName() + " " + patient.getLastName(),
-                    "ID: " + patient.getPatientId(),
-                    "Age: " + patient.getAge() + " | Gender: " + patient.getGender(),
-                    "Condition: " + patient.getSymptomsDescription()));
+                    name.trim(),
+                    "ID: " + patientId,
+                    "Age: " + age + " | Gender: " + gender,
+                    "Condition: " + condition));
             }
         } else {
             // Find specific patient
-            for (Patient patient : allPatients) {
-                String patientName = patient.getFirstName() + " " + patient.getLastName() + " (" + patient.getPatientId() + ")";
+            for (Patient patient : filteredPatients) {
+                String fullName = patient.getFirstName() + " " + patient.getLastName();
+                String patientId = patient.getPatientId() != null ? patient.getPatientId() : "";
+                String patientName = fullName + " (" + patientId + ")";
                 if (patientName.equals(selectedPatient)) {
+                    String name = fullName.trim();
+                    String age = patient.getAge() != null ? patient.getAge() : "N/A";
+                    String gender = patient.getGender() != null ? patient.getGender() : "N/A";
+                    String condition = patient.getSymptomsDescription() != null ? patient.getSymptomsDescription() : "No condition recorded";
+                    
                     reportItems.add(new ReportItem("PATIENT_DETAIL", 
-                        patient.getFirstName() + " " + patient.getLastName(),
-                        "ID: " + patient.getPatientId(),
-                        "Age: " + patient.getAge() + " | Gender: " + patient.getGender(),
-                        "Condition: " + patient.getSymptomsDescription()));
+                        name,
+                        "ID: " + patientId,
+                        "Age: " + age + " | Gender: " + gender,
+                        "Condition: " + condition));
                     break;
                 }
             }
         }
+    }
+    
+    private List<Patient> filterPatientsByTimePeriod(List<Patient> patients) {
+        if (selectedTimePeriod.equals("All Time")) {
+            return patients;
+        }
+        
+        Calendar calendar = Calendar.getInstance();
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
+        
+        List<Patient> filtered = new ArrayList<>();
+        for (Patient patient : patients) {
+            String createdDate = patient.getCreatedDate();
+            if (createdDate == null || createdDate.isEmpty()) {
+                // If no date, include it in "All Time" only
+                if (selectedTimePeriod.equals("All Time")) {
+                    filtered.add(patient);
+                }
+                continue;
+            }
+            
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+                Date patientDate = sdf.parse(createdDate.substring(0, Math.min(10, createdDate.length())));
+                Date currentDate = sdf.parse(today);
+                
+                calendar.setTime(currentDate);
+                
+                switch (selectedTimePeriod) {
+                    case "This Week":
+                        calendar.add(Calendar.DAY_OF_YEAR, -7);
+                        break;
+                    case "This Month":
+                        calendar.add(Calendar.MONTH, -1);
+                        break;
+                    case "This Year":
+                        calendar.add(Calendar.YEAR, -1);
+                        break;
+                    case "Last Week":
+                        calendar.add(Calendar.WEEK_OF_YEAR, -1);
+                        Date lastWeekStart = calendar.getTime();
+                        calendar.add(Calendar.WEEK_OF_YEAR, 1);
+                        Date lastWeekEnd = calendar.getTime();
+                        if (patientDate.after(lastWeekStart) && patientDate.before(lastWeekEnd)) {
+                            filtered.add(patient);
+                        }
+                        continue;
+                    case "Last Month":
+                        calendar.add(Calendar.MONTH, -1);
+                        Date lastMonthStart = calendar.getTime();
+                        calendar.add(Calendar.MONTH, 1);
+                        Date lastMonthEnd = calendar.getTime();
+                        if (patientDate.after(lastMonthStart) && patientDate.before(lastMonthEnd)) {
+                            filtered.add(patient);
+                        }
+                        continue;
+                    case "Last Year":
+                        calendar.add(Calendar.YEAR, -1);
+                        Date lastYearStart = calendar.getTime();
+                        calendar.add(Calendar.YEAR, 1);
+                        Date lastYearEnd = calendar.getTime();
+                        if (patientDate.after(lastYearStart) && patientDate.before(lastYearEnd)) {
+                            filtered.add(patient);
+                        }
+                        continue;
+                }
+                
+                Date periodStart = calendar.getTime();
+                if (patientDate.after(periodStart) || patientDate.equals(periodStart)) {
+                    filtered.add(patient);
+                }
+            } catch (Exception e) {
+                // If date parsing fails, include patient if "All Time"
+                if (selectedTimePeriod.equals("All Time")) {
+                    filtered.add(patient);
+                }
+            }
+        }
+        
+        return filtered;
     }
 
     private void generatePrescriptionReport() {
         reportItems.add(new ReportItem("REPORT_HEADER", "Prescription Report - " + selectedTimePeriod, "", "", ""));
         
         // Get prescriptions from database
-        List<Prescription> prescriptions = databaseHelper.getAllPrescriptions();
+        List<Prescription> allPrescriptions = databaseHelper.getAllPrescriptions();
+        List<Prescription> filteredPrescriptions = filterPrescriptionsByTimePeriod(allPrescriptions);
+        
+        int totalPrescriptions = filteredPrescriptions.size();
+        int pendingCount = 0;
+        int dispensedCount = 0;
+        
+        for (Prescription prescription : filteredPrescriptions) {
+            String status = prescription.getStatus();
+            if (status != null && status.equalsIgnoreCase("Dispensed")) {
+                dispensedCount++;
+            } else {
+                pendingCount++;
+            }
+        }
         
         reportItems.add(new ReportItem("STATISTICS", "Prescription Statistics", 
-            "Total Prescriptions: " + prescriptions.size(), 
-            "Pending: " + prescriptions.size(), // All are pending in demo
-            "Dispensed: 0"));
+            "Total Prescriptions: " + totalPrescriptions, 
+            "Pending: " + pendingCount,
+            "Dispensed: " + dispensedCount));
         
         // Add prescription details
-        for (Prescription prescription : prescriptions) {
+        for (Prescription prescription : filteredPrescriptions) {
+            String prescriptionId = prescription.getPrescriptionId() != null ? prescription.getPrescriptionId() : "N/A";
+            String patientName = prescription.getPatientName() != null ? prescription.getPatientName() : "N/A";
+            String medication = prescription.getMedication() != null ? prescription.getMedication() : "N/A";
+            String doctorName = prescription.getDoctorName() != null ? prescription.getDoctorName() : "N/A";
+            String createdDate = prescription.getCreatedDate() != null ? prescription.getCreatedDate() : "N/A";
+            String dosage = prescription.getDosage() != null ? prescription.getDosage() : "";
+            String frequency = prescription.getFrequency() != null ? prescription.getFrequency() : "";
+            
             reportItems.add(new ReportItem("PRESCRIPTION_DETAIL", 
-                "Prescription ID: " + prescription.getPrescriptionId(),
-                "Patient: " + prescription.getPatientName(),
-                "Medicine: " + prescription.getMedication(),
-                "Doctor: " + prescription.getDoctorName() + " | Date: " + prescription.getCreatedDate()));
+                "Prescription ID: " + prescriptionId,
+                "Patient: " + patientName,
+                "Medicine: " + medication + (dosage.isEmpty() ? "" : " (" + dosage + ")"),
+                "Doctor: " + doctorName + " | Date: " + createdDate.substring(0, Math.min(10, createdDate.length()))));
         }
+    }
+    
+    private List<Prescription> filterPrescriptionsByTimePeriod(List<Prescription> prescriptions) {
+        if (selectedTimePeriod.equals("All Time")) {
+            return prescriptions;
+        }
+        
+        Calendar calendar = Calendar.getInstance();
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.getTime());
+        
+        List<Prescription> filtered = new ArrayList<>();
+        for (Prescription prescription : prescriptions) {
+            String createdDate = prescription.getCreatedDate();
+            if (createdDate == null || createdDate.isEmpty()) {
+                if (selectedTimePeriod.equals("All Time")) {
+                    filtered.add(prescription);
+                }
+                continue;
+            }
+            
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+                Date prescriptionDate = sdf.parse(createdDate.substring(0, Math.min(10, createdDate.length())));
+                Date currentDate = sdf.parse(today);
+                
+                calendar.setTime(currentDate);
+                
+                switch (selectedTimePeriod) {
+                    case "This Week":
+                        calendar.add(Calendar.DAY_OF_YEAR, -7);
+                        break;
+                    case "This Month":
+                        calendar.add(Calendar.MONTH, -1);
+                        break;
+                    case "This Year":
+                        calendar.add(Calendar.YEAR, -1);
+                        break;
+                    case "Last Week":
+                        calendar.add(Calendar.WEEK_OF_YEAR, -1);
+                        Date lastWeekStart = calendar.getTime();
+                        calendar.add(Calendar.WEEK_OF_YEAR, 1);
+                        Date lastWeekEnd = calendar.getTime();
+                        if (prescriptionDate.after(lastWeekStart) && prescriptionDate.before(lastWeekEnd)) {
+                            filtered.add(prescription);
+                        }
+                        continue;
+                    case "Last Month":
+                        calendar.add(Calendar.MONTH, -1);
+                        Date lastMonthStart = calendar.getTime();
+                        calendar.add(Calendar.MONTH, 1);
+                        Date lastMonthEnd = calendar.getTime();
+                        if (prescriptionDate.after(lastMonthStart) && prescriptionDate.before(lastMonthEnd)) {
+                            filtered.add(prescription);
+                        }
+                        continue;
+                    case "Last Year":
+                        calendar.add(Calendar.YEAR, -1);
+                        Date lastYearStart = calendar.getTime();
+                        calendar.add(Calendar.YEAR, 1);
+                        Date lastYearEnd = calendar.getTime();
+                        if (prescriptionDate.after(lastYearStart) && prescriptionDate.before(lastYearEnd)) {
+                            filtered.add(prescription);
+                        }
+                        continue;
+                }
+                
+                Date periodStart = calendar.getTime();
+                if (prescriptionDate.after(periodStart) || prescriptionDate.equals(periodStart)) {
+                    filtered.add(prescription);
+                }
+            } catch (Exception e) {
+                if (selectedTimePeriod.equals("All Time")) {
+                    filtered.add(prescription);
+                }
+            }
+        }
+        
+        return filtered;
     }
 
     private void generateSystemReport() {
         reportItems.add(new ReportItem("REPORT_HEADER", "System Report - " + selectedTimePeriod, "", "", ""));
         
-        // Get system statistics
-        int totalEmployees = databaseHelper.getAllEmployees().size();
-        int totalPatients = allPatients.size();
-        int totalPrescriptions = databaseHelper.getAllPrescriptions().size();
+        // Get system statistics from database
+        int totalEmployees = databaseHelper.getTotalEmployeesCount();
+        int totalPatients = databaseHelper.getTotalPatientsCount();
+        int totalPrescriptions = databaseHelper.getPrescriptionsCount();
         int totalMedicines = databaseHelper.getTotalMedicinesCount();
+        int nurses = databaseHelper.getEmployeesCountByRole("Nurse");
+        int doctors = databaseHelper.getEmployeesCountByRole("Doctor");
+        int pharmacists = databaseHelper.getEmployeesCountByRole("Pharmacist");
         
         reportItems.add(new ReportItem("STATISTICS", "System Statistics", 
             "Total Employees: " + totalEmployees, 
             "Total Patients: " + totalPatients,
             "Total Prescriptions: " + totalPrescriptions + " | Total Medicines: " + totalMedicines));
         
+        reportItems.add(new ReportItem("STATISTICS", "Employee Breakdown", 
+            "Nurses: " + nurses + " | Doctors: " + doctors,
+            "Pharmacists: " + pharmacists,
+            "Total Active Staff: " + (nurses + doctors + pharmacists)));
+        
         // Add system health indicators
         reportItems.add(new ReportItem("SYSTEM_HEALTH", "System Health", 
             "Database Status: ✅ Active", 
             "User Sessions: ✅ Active",
-            "Last Backup: " + new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date())));
+            "Report Generated: " + new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date())));
     }
 
     private void generateFinancialReport() {
@@ -437,12 +707,20 @@ public class ReportsFragment extends Fragment {
     }
 
     private void updateEmptyState() {
-        if (reportItems.isEmpty()) {
-            emptyStateText.setVisibility(View.VISIBLE);
-            reportsRecyclerView.setVisibility(View.GONE);
-        } else {
-            emptyStateText.setVisibility(View.GONE);
-            reportsRecyclerView.setVisibility(View.VISIBLE);
+        try {
+            if (emptyStateText == null || reportsRecyclerView == null) {
+                return; // Views not initialized yet
+            }
+            
+            if (reportItems == null || reportItems.isEmpty()) {
+                emptyStateText.setVisibility(View.VISIBLE);
+                reportsRecyclerView.setVisibility(View.GONE);
+            } else {
+                emptyStateText.setVisibility(View.GONE);
+                reportsRecyclerView.setVisibility(View.VISIBLE);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -607,34 +885,75 @@ public class ReportsFragment extends Fragment {
             }
 
             public void bind(ReportItem item) {
+                // Set title
                 titleText.setText(item.getTitle());
-                subtitleText.setText(item.getSubtitle());
-                descriptionText.setText(item.getDescription());
-                detailsText.setText(item.getDetails());
+                
+                // Set subtitle (time frame)
+                if (item.getSubtitle() != null && !item.getSubtitle().isEmpty()) {
+                    subtitleText.setText(item.getSubtitle());
+                    subtitleText.setVisibility(View.VISIBLE);
+                } else {
+                    subtitleText.setVisibility(View.GONE);
+                }
+                
+                // Set description (summary)
+                if (item.getDescription() != null && !item.getDescription().isEmpty()) {
+                    descriptionText.setText(item.getDescription());
+                    descriptionText.setVisibility(View.VISIBLE);
+                } else {
+                    descriptionText.setVisibility(View.GONE);
+                }
+                
+                // Set details
+                if (item.getDetails() != null && !item.getDetails().isEmpty()) {
+                    detailsText.setText(item.getDetails());
+                    detailsText.setVisibility(View.VISIBLE);
+                } else {
+                    detailsText.setVisibility(View.GONE);
+                }
 
-                // Set different styles based on item type
-                switch (item.getType()) {
-                    case "REPORT_HEADER":
-                        titleText.setTextSize(18);
-                        titleText.setTextColor(getContext().getColor(R.color.primary_blue));
-                        subtitleText.setVisibility(View.GONE);
-                        descriptionText.setVisibility(View.GONE);
-                        detailsText.setVisibility(View.GONE);
-                        break;
-                    case "STATISTICS":
-                        titleText.setTextSize(16);
-                        titleText.setTextColor(getContext().getColor(R.color.success_green));
-                        subtitleText.setVisibility(View.VISIBLE);
-                        descriptionText.setVisibility(View.VISIBLE);
-                        detailsText.setVisibility(View.VISIBLE);
-                        break;
-                    default:
-                        titleText.setTextSize(14);
-                        titleText.setTextColor(getContext().getColor(R.color.text_primary));
-                        subtitleText.setVisibility(View.VISIBLE);
-                        descriptionText.setVisibility(View.VISIBLE);
-                        detailsText.setVisibility(View.VISIBLE);
-                        break;
+                // Set different styles and colors based on item type
+                Context context = getContext();
+                if (context != null) {
+                    switch (item.getType()) {
+                        case "REPORT_HEADER":
+                            titleText.setTextSize(20);
+                            titleText.setTextColor(context.getColor(R.color.primary_blue));
+                            titleText.setTypeface(null, android.graphics.Typeface.BOLD);
+                            subtitleText.setVisibility(View.GONE);
+                            descriptionText.setVisibility(View.GONE);
+                            detailsText.setVisibility(View.GONE);
+                            reportCard.setCardBackgroundColor(context.getColor(R.color.background_light));
+                            break;
+                        case "STATISTICS":
+                            titleText.setTextSize(16);
+                            titleText.setTextColor(context.getColor(R.color.success_green));
+                            titleText.setTypeface(null, android.graphics.Typeface.BOLD);
+                            subtitleText.setVisibility(View.VISIBLE);
+                            descriptionText.setVisibility(View.VISIBLE);
+                            detailsText.setVisibility(View.VISIBLE);
+                            reportCard.setCardBackgroundColor(context.getColor(android.R.color.white));
+                            break;
+                        case "PATIENT_DETAIL":
+                        case "PRESCRIPTION_DETAIL":
+                            titleText.setTextSize(15);
+                            titleText.setTextColor(context.getColor(R.color.text_primary));
+                            titleText.setTypeface(null, android.graphics.Typeface.BOLD);
+                            subtitleText.setVisibility(View.VISIBLE);
+                            descriptionText.setVisibility(View.VISIBLE);
+                            detailsText.setVisibility(View.VISIBLE);
+                            reportCard.setCardBackgroundColor(context.getColor(android.R.color.white));
+                            break;
+                        default:
+                            titleText.setTextSize(14);
+                            titleText.setTextColor(context.getColor(R.color.text_primary));
+                            titleText.setTypeface(null, android.graphics.Typeface.NORMAL);
+                            subtitleText.setVisibility(View.VISIBLE);
+                            descriptionText.setVisibility(View.VISIBLE);
+                            detailsText.setVisibility(View.VISIBLE);
+                            reportCard.setCardBackgroundColor(context.getColor(android.R.color.white));
+                            break;
+                    }
                 }
             }
         }

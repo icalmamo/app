@@ -33,13 +33,13 @@ public class NewEnhancedInventoryFragment extends Fragment {
 
     // UI Components
     private RecyclerView medicinesRecyclerView;
-    private TextView emptyStateText;
+    private View emptyStateText; // Changed to View since it's a LinearLayout
     private MaterialButton addMedicineButton;
     private MaterialButton refreshButton;
     private MaterialButton lowStockButton;
     private MaterialButton expiringSoonButton;
     private MaterialButton analyticsButton;
-    private MaterialButton suppliersButton;
+    private MaterialButton historyButton;
     
     // Data
     private List<Medicine> allMedicines;
@@ -65,6 +65,10 @@ public class NewEnhancedInventoryFragment extends Fragment {
     }
 
     private void initializeViews(View view) {
+        if (view == null) {
+            return;
+        }
+        
         medicinesRecyclerView = view.findViewById(R.id.medicinesRecyclerView);
         emptyStateText = view.findViewById(R.id.emptyStateText);
         addMedicineButton = view.findViewById(R.id.addMedicineButton);
@@ -72,47 +76,73 @@ public class NewEnhancedInventoryFragment extends Fragment {
         lowStockButton = view.findViewById(R.id.lowStockButton);
         expiringSoonButton = view.findViewById(R.id.expiringSoonButton);
         analyticsButton = view.findViewById(R.id.analyticsButton);
-        suppliersButton = view.findViewById(R.id.suppliersButton);
+        historyButton = view.findViewById(R.id.suppliersButton);
         
         allMedicines = new ArrayList<>();
-        filteredMedicines = new ArrayList<>();
+        filteredMedicines = new ArrayList();
+        
+        // Initialize empty state visibility
+        if (emptyStateText != null) {
+            emptyStateText.setVisibility(View.GONE);
+        }
     }
 
     private void initializeDatabase() {
+        if (getContext() == null) {
+            return;
+        }
         databaseHelper = new HCasDatabaseHelper(getContext());
     }
 
     private void setupRecyclerView() {
+        if (getContext() == null || medicinesRecyclerView == null) {
+            return;
+        }
+        
         medicineAdapter = new MedicineAdapter(filteredMedicines);
         medicinesRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         medicinesRecyclerView.setAdapter(medicineAdapter);
     }
 
     private void setupClickListeners() {
-        addMedicineButton.setOnClickListener(v -> showAddMedicineDialog());
-        refreshButton.setOnClickListener(v -> loadMedicines());
-        lowStockButton.setOnClickListener(v -> toggleLowStockFilter());
-        expiringSoonButton.setOnClickListener(v -> toggleExpiringSoonFilter());
-        analyticsButton.setOnClickListener(v -> showAnalyticsDialog());
-        suppliersButton.setOnClickListener(v -> showSuppliersDialog());
-        
-        // Back button functionality
-        ImageButton backButton = getView().findViewById(R.id.backButton);
-        if (backButton != null) {
-            backButton.setOnClickListener(v -> {
-                if (getActivity() instanceof PharmacistDashboardActivity) {
-                    ((PharmacistDashboardActivity) getActivity()).loadFragment(new PharmacistDashboardFragment());
-                    ((PharmacistDashboardActivity) getActivity()).getSupportActionBar().setTitle("Pharmacist Dashboard");
-                }
-            });
+        if (addMedicineButton != null) {
+            addMedicineButton.setOnClickListener(v -> showAddMedicineDialog());
         }
+        if (refreshButton != null) {
+            refreshButton.setOnClickListener(v -> loadMedicines());
+        }
+        if (lowStockButton != null) {
+            lowStockButton.setOnClickListener(v -> toggleLowStockFilter());
+        }
+        if (expiringSoonButton != null) {
+            expiringSoonButton.setOnClickListener(v -> toggleExpiringSoonFilter());
+        }
+        if (analyticsButton != null) {
+            analyticsButton.setOnClickListener(v -> showAnalyticsDialog());
+        }
+        if (historyButton != null) {
+            historyButton.setOnClickListener(v -> navigateToMedicineHistory());
+        }
+        
+        // Back button functionality - moved to onViewCreated where view is guaranteed to exist
     }
 
     private void loadMedicines() {
         try {
-            // Load medicines from database
+            if (getContext() == null || databaseHelper == null) {
+                return;
+            }
+            
+            // Load medicines from database (exclude expired medicines - they should only be in Disposed Medicine section)
             allMedicines.clear();
-            allMedicines.addAll(databaseHelper.getAllMedicines());
+            List<Medicine> medicines = databaseHelper.getAllMedicines();
+            if (medicines != null) {
+                for (Medicine medicine : medicines) {
+                    if (medicine != null && !isExpired(medicine)) {
+                        allMedicines.add(medicine);
+                    }
+                }
+            }
             
             // If no medicines in database, add sample medicines for demo
             if (allMedicines.isEmpty()) {
@@ -126,13 +156,21 @@ public class NewEnhancedInventoryFragment extends Fragment {
             
             filteredMedicines.clear();
             filteredMedicines.addAll(allMedicines);
-            medicineAdapter.notifyDataSetChanged();
+            
+            if (medicineAdapter != null) {
+                medicineAdapter.notifyDataSetChanged();
+            }
             
             updateEmptyState();
             
-            Toast.makeText(getContext(), "📦 Inventory refreshed: " + allMedicines.size() + " medicines", Toast.LENGTH_SHORT).show();
+            if (getContext() != null) {
+                Toast.makeText(getContext(), "📦 Inventory refreshed: " + allMedicines.size() + " medicines", Toast.LENGTH_SHORT).show();
+            }
         } catch (Exception e) {
-            Toast.makeText(getContext(), "❌ Error loading inventory: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            if (getContext() != null) {
+                Toast.makeText(getContext(), "❌ Error loading inventory: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+            e.printStackTrace();
         }
     }
 
@@ -168,6 +206,10 @@ public class NewEnhancedInventoryFragment extends Fragment {
     }
 
     private void toggleLowStockFilter() {
+        if (getContext() == null || databaseHelper == null || medicineAdapter == null) {
+            return;
+        }
+        
         if (showingLowStock) {
             // Show all medicines
             filteredMedicines.clear();
@@ -176,12 +218,17 @@ public class NewEnhancedInventoryFragment extends Fragment {
             showingExpiringSoon = false;
             Toast.makeText(getContext(), "📦 Showing all medicines", Toast.LENGTH_SHORT).show();
         } else {
-            // Show low stock medicines
+            // Show low stock medicines using configurable minimum
             filteredMedicines.clear();
-            filteredMedicines.addAll(databaseHelper.getLowStockMedicines());
+            int minimumStock = PharmacistSettingsFragment.getMinimumStockQuantity(getContext());
+            for (Medicine medicine : allMedicines) {
+                if (medicine != null && medicine.isLowStock(minimumStock)) {
+                    filteredMedicines.add(medicine);
+                }
+            }
             showingLowStock = true;
             showingExpiringSoon = false;
-            Toast.makeText(getContext(), "⚠️ Showing " + filteredMedicines.size() + " low stock medicines", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getContext(), "⚠️ Showing " + filteredMedicines.size() + " low stock medicines (threshold: " + minimumStock + ")", Toast.LENGTH_SHORT).show();
         }
         
         updateButtonStates();
@@ -190,6 +237,10 @@ public class NewEnhancedInventoryFragment extends Fragment {
     }
 
     private void toggleExpiringSoonFilter() {
+        if (getContext() == null || databaseHelper == null || medicineAdapter == null) {
+            return;
+        }
+        
         if (showingExpiringSoon) {
             // Show all medicines
             filteredMedicines.clear();
@@ -198,12 +249,18 @@ public class NewEnhancedInventoryFragment extends Fragment {
             showingExpiringSoon = false;
             Toast.makeText(getContext(), "📦 Showing all medicines", Toast.LENGTH_SHORT).show();
         } else {
-            // Show expiring soon medicines
+            // Show expiring soon medicines using configurable threshold
             filteredMedicines.clear();
-            filteredMedicines.addAll(databaseHelper.getExpiringSoonMedicines());
+            int thresholdMonths = PharmacistSettingsFragment.getExpiryNotificationMonths(getContext());
+            for (Medicine medicine : allMedicines) {
+                if (medicine != null && isExpiringSoon(medicine, thresholdMonths)) {
+                    filteredMedicines.add(medicine);
+                }
+            }
             showingLowStock = false;
             showingExpiringSoon = true;
-            Toast.makeText(getContext(), "⏰ Showing " + filteredMedicines.size() + " medicines expiring soon", Toast.LENGTH_SHORT).show();
+            String monthText = thresholdMonths == 1 ? "month" : "months";
+            Toast.makeText(getContext(), "⏰ Showing " + filteredMedicines.size() + " medicines expiring soon (threshold: " + thresholdMonths + " " + monthText + ")", Toast.LENGTH_SHORT).show();
         }
         
         updateButtonStates();
@@ -211,7 +268,104 @@ public class NewEnhancedInventoryFragment extends Fragment {
         updateEmptyState();
     }
 
+    /**
+     * Check if a medicine is expired (past expiry date)
+     */
+    private boolean isExpired(Medicine medicine) {
+        if (medicine == null || medicine.getExpiryDate() == null || medicine.getExpiryDate().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            // Parse expiry date (format: YYYY-MM-DD)
+            String expiryDateStr = medicine.getExpiryDate().trim();
+            String[] dateParts = expiryDateStr.split("-");
+            
+            if (dateParts.length != 3) {
+                return false;
+            }
+            
+            int expiryYear = Integer.parseInt(dateParts[0]);
+            int expiryMonth = Integer.parseInt(dateParts[1]);
+            int expiryDay = Integer.parseInt(dateParts[2]);
+            
+            // Get current date
+            java.util.Calendar currentCal = java.util.Calendar.getInstance();
+            int currentYear = currentCal.get(java.util.Calendar.YEAR);
+            int currentMonth = currentCal.get(java.util.Calendar.MONTH) + 1; // Calendar months are 0-based
+            int currentDay = currentCal.get(java.util.Calendar.DAY_OF_MONTH);
+            
+            // Check if expired
+            if (expiryYear < currentYear) {
+                return true;
+            } else if (expiryYear == currentYear) {
+                if (expiryMonth < currentMonth) {
+                    return true;
+                } else if (expiryMonth == currentMonth && expiryDay < currentDay) {
+                    return true;
+                }
+            }
+            
+            return false;
+            
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if a medicine is expiring soon based on the configurable threshold
+     * @param medicine The medicine to check
+     * @param thresholdMonths Number of months before expiry to mark as expiring soon
+     * @return true if medicine is expiring within the threshold
+     */
+    private boolean isExpiringSoon(Medicine medicine, int thresholdMonths) {
+        if (medicine == null || medicine.getExpiryDate() == null || medicine.getExpiryDate().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            // Parse expiry date (format: YYYY-MM-DD)
+            String expiryDateStr = medicine.getExpiryDate().trim();
+            String[] dateParts = expiryDateStr.split("-");
+            
+            if (dateParts.length != 3) {
+                return false;
+            }
+            
+            int expiryYear = Integer.parseInt(dateParts[0]);
+            int expiryMonth = Integer.parseInt(dateParts[1]);
+            int expiryDay = Integer.parseInt(dateParts[2]);
+            
+            // Get current date
+            java.util.Calendar currentCal = java.util.Calendar.getInstance();
+            int currentYear = currentCal.get(java.util.Calendar.YEAR);
+            int currentMonth = currentCal.get(java.util.Calendar.MONTH) + 1; // Calendar months are 0-based
+            int currentDay = currentCal.get(java.util.Calendar.DAY_OF_MONTH);
+            
+            // Calculate months difference
+            int yearDiff = expiryYear - currentYear;
+            int monthDiff = (yearDiff * 12) + (expiryMonth - currentMonth);
+            
+            // Adjust for day difference (if expiry day is before current day in same month, count as less than a month)
+            if (monthDiff > 0 && expiryDay < currentDay) {
+                monthDiff--;
+            }
+            
+            // Check if within threshold
+            return monthDiff >= 0 && monthDiff <= thresholdMonths;
+            
+        } catch (Exception e) {
+            // If date parsing fails, return false
+            return false;
+        }
+    }
+
     private void updateButtonStates() {
+        if (getContext() == null || lowStockButton == null || expiringSoonButton == null) {
+            return;
+        }
+        
         // Update button appearance based on filter state
         if (showingLowStock) {
             lowStockButton.setBackgroundColor(getContext().getColor(R.color.warning_orange));
@@ -231,16 +385,46 @@ public class NewEnhancedInventoryFragment extends Fragment {
     }
 
     private void updateEmptyState() {
-        if (filteredMedicines.isEmpty()) {
+        if (emptyStateText == null || medicinesRecyclerView == null) {
+            return;
+        }
+        
+        if (filteredMedicines == null || filteredMedicines.isEmpty()) {
             emptyStateText.setVisibility(View.VISIBLE);
             medicinesRecyclerView.setVisibility(View.GONE);
             
-            if (showingLowStock) {
-                emptyStateText.setText("🎉 No low stock medicines!\nAll medicines are well stocked.");
-            } else if (showingExpiringSoon) {
-                emptyStateText.setText("🎉 No expiring medicines!\nAll medicines have good expiry dates.");
-            } else {
-                emptyStateText.setText("📦 No medicines found\nAdd medicines to start managing your inventory");
+            // Find TextView inside LinearLayout for empty state
+            TextView emptyTextView = emptyStateText.findViewById(R.id.emptyStateTextView);
+            if (emptyTextView == null && emptyStateText instanceof ViewGroup) {
+                // If TextView not found, try to find any TextView as child
+                ViewGroup viewGroup = (ViewGroup) emptyStateText;
+                int childCount = viewGroup.getChildCount();
+                if (childCount > 0) {
+                    // Check the last child (usually the main text)
+                    View child = viewGroup.getChildAt(childCount - 1);
+                    if (child instanceof TextView) {
+                        emptyTextView = (TextView) child;
+                    } else {
+                        // Search through all children for a TextView
+                        for (int i = 0; i < childCount; i++) {
+                            View childView = viewGroup.getChildAt(i);
+                            if (childView instanceof TextView) {
+                                emptyTextView = (TextView) childView;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (emptyTextView != null) {
+                if (showingLowStock) {
+                    emptyTextView.setText("🎉 No low stock medicines!\nAll medicines are well stocked.");
+                } else if (showingExpiringSoon) {
+                    emptyTextView.setText("🎉 No expiring medicines!\nAll medicines have good expiry dates.");
+                } else {
+                    emptyTextView.setText("📦 No medicines found\nAdd medicines to start managing your inventory");
+                }
             }
         } else {
             emptyStateText.setVisibility(View.GONE);
@@ -249,6 +433,10 @@ public class NewEnhancedInventoryFragment extends Fragment {
     }
 
     private void showAddMedicineDialog() {
+        if (getContext() == null) {
+            return;
+        }
+        
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
         builder.setTitle("➕ Add New Medicine");
         
@@ -376,8 +564,22 @@ public class NewEnhancedInventoryFragment extends Fragment {
         builder.setTitle("📊 Inventory Analytics");
         
         int totalMedicines = databaseHelper.getTotalMedicinesCount();
-        int lowStockCount = databaseHelper.getLowStockMedicinesCount();
-        int expiringSoonCount = databaseHelper.getExpiringSoonMedicinesCount();
+        // Calculate low stock count using configurable minimum
+        int minimumStock = PharmacistSettingsFragment.getMinimumStockQuantity(getContext());
+        int lowStockCount = 0;
+        for (Medicine medicine : allMedicines) {
+            if (medicine != null && medicine.isLowStock(minimumStock)) {
+                lowStockCount++;
+            }
+        }
+        // Calculate expiring soon count using configurable threshold
+        int thresholdMonths = PharmacistSettingsFragment.getExpiryNotificationMonths(getContext());
+        int expiringSoonCount = 0;
+        for (Medicine medicine : allMedicines) {
+            if (medicine != null && isExpiringSoon(medicine, thresholdMonths)) {
+                expiringSoonCount++;
+            }
+        }
         
         String analyticsText = "📦 Total Medicines: " + totalMedicines + "\n\n" +
                              "⚠️ Low Stock Items: " + lowStockCount + "\n\n" +
@@ -390,32 +592,13 @@ public class NewEnhancedInventoryFragment extends Fragment {
         builder.show();
     }
 
-    private void showSuppliersDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-        builder.setTitle("🏢 Supplier Information");
-        
-        // Get unique suppliers from medicines
-        List<String> suppliers = new ArrayList<>();
-        for (Medicine medicine : allMedicines) {
-            if (!suppliers.contains(medicine.getSupplier())) {
-                suppliers.add(medicine.getSupplier());
+    private void navigateToMedicineHistory() {
+        if (getActivity() instanceof PharmacistDashboardActivity) {
+            ((PharmacistDashboardActivity) getActivity()).loadFragment(new DisposedMedicineFragment());
+            if (((PharmacistDashboardActivity) getActivity()).getSupportActionBar() != null) {
+                ((PharmacistDashboardActivity) getActivity()).getSupportActionBar().setTitle("Disposed Medicine");
             }
         }
-        
-        StringBuilder supplierText = new StringBuilder("📋 Active Suppliers:\n\n");
-        for (String supplier : suppliers) {
-            int medicineCount = 0;
-            for (Medicine medicine : allMedicines) {
-                if (medicine.getSupplier().equals(supplier)) {
-                    medicineCount++;
-                }
-            }
-            supplierText.append("🏢 ").append(supplier).append(" (").append(medicineCount).append(" medicines)\n");
-        }
-        
-        builder.setMessage(supplierText.toString());
-        builder.setPositiveButton("Close", null);
-        builder.show();
     }
 
     @Override
@@ -494,30 +677,47 @@ public class NewEnhancedInventoryFragment extends Fragment {
             }
 
             public void bind(Medicine medicine) {
-                medicineNameText.setText(medicine.getMedicineName());
-                dosageText.setText("Dosage: " + medicine.getDosage());
-                stockText.setText("Stock: " + medicine.getStockQuantity() + " " + medicine.getUnit());
-                categoryText.setText("Category: " + medicine.getCategory());
-                expiryText.setText("Expires: " + medicine.getExpiryDate());
+                if (medicine == null || getContext() == null) {
+                    return;
+                }
+                
+                // Safely set text with null checks
+                medicineNameText.setText(medicine.getMedicineName() != null ? medicine.getMedicineName() : "Unknown");
+                dosageText.setText("Dosage: " + (medicine.getDosage() != null ? medicine.getDosage() : "N/A"));
+                stockText.setText("Stock: " + medicine.getStockQuantity() + " " + (medicine.getUnit() != null ? medicine.getUnit() : "units"));
+                categoryText.setText("Category: " + (medicine.getCategory() != null ? medicine.getCategory() : "N/A"));
+                
+                String expiryDate = medicine.getExpiryDate() != null ? medicine.getExpiryDate() : "N/A";
+                expiryText.setText("Expires: " + expiryDate);
                 priceText.setText("Price: ₱" + String.format("%.2f", medicine.getPrice()));
-                supplierText.setText("Supplier: " + medicine.getSupplier());
+                supplierText.setText("Supplier: " + (medicine.getSupplier() != null ? medicine.getSupplier() : "N/A"));
 
-                // Set stock color based on quantity
-                if (medicine.isLowStock()) {
-                    stockText.setTextColor(getContext().getColor(R.color.warning_orange));
-                } else {
-                    stockText.setTextColor(getContext().getColor(R.color.success_green));
+                // Set stock color based on quantity using configurable minimum
+                try {
+                    int minimumStock = PharmacistSettingsFragment.getMinimumStockQuantity(getContext());
+                    if (medicine.isLowStock(minimumStock)) {
+                        stockText.setTextColor(getContext().getColor(R.color.warning_orange));
+                    } else {
+                        stockText.setTextColor(getContext().getColor(R.color.success_green));
+                    }
+
+                    // Set expiry color
+                    if (expiryDate.contains("2024")) {
+                        expiryText.setTextColor(getContext().getColor(R.color.error_red));
+                    } else {
+                        expiryText.setTextColor(getContext().getColor(R.color.text_secondary));
+                    }
+                } catch (Exception e) {
+                    // Fallback to default colors if resource access fails
+                    e.printStackTrace();
                 }
 
-                // Set expiry color
-                if (medicine.getExpiryDate().contains("2024")) {
-                    expiryText.setTextColor(getContext().getColor(R.color.error_red));
-                } else {
-                    expiryText.setTextColor(getContext().getColor(R.color.text_secondary));
+                if (editButton != null) {
+                    editButton.setOnClickListener(v -> showEditMedicineDialog(medicine));
                 }
-
-                editButton.setOnClickListener(v -> showEditMedicineDialog(medicine));
-                deleteButton.setOnClickListener(v -> showDeleteConfirmation(medicine));
+                if (deleteButton != null) {
+                    deleteButton.setOnClickListener(v -> showDeleteConfirmation(medicine));
+                }
             }
         }
     }

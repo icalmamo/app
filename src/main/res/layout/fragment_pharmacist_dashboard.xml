@@ -110,12 +110,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_marginBottom="8dp"
-                android:text="Drug Interactions"
+                android:text="Disposed Medicine"
                 android:textSize="16sp"
-                app:icon="@drawable/ic_drug_interactions"
+                app:icon="@drawable/ic_delete"
                 app:iconGravity="textStart"
                 app:cornerRadius="8dp"
-                app:backgroundTint="@color/warning_orange"
+                app:backgroundTint="@color/error_red"
                 android:textColor="@color/white" />
 
             <com.google.android.material.button.MaterialButton

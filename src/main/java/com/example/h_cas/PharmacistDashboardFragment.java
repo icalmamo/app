@@ -18,6 +18,8 @@ import com.google.android.material.card.MaterialCardView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 
+import java.util.List;
+
 /**
  * PharmacistDashboardFragment displays the main dashboard for pharmacists
  * with medication statistics and quick access to pharmacy functions.
@@ -109,7 +111,7 @@ public class PharmacistDashboardFragment extends Fragment {
     private void setupClickListeners() {
         inventoryButton.setOnClickListener(v -> navigateToInventory());
         dispensingButton.setOnClickListener(v -> navigateToDispensing());
-        interactionsButton.setOnClickListener(v -> navigateToInteractions());
+        interactionsButton.setOnClickListener(v -> navigateToDisposedMedicine());
         verificationButton.setOnClickListener(v -> navigateToVerification());
         profileButton.setOnClickListener(v -> navigateToProfile());
         reportsButton.setOnClickListener(v -> navigateToReports());
@@ -128,9 +130,9 @@ public class PharmacistDashboardFragment extends Fragment {
         }
     }
 
-    private void navigateToInteractions() {
+    private void navigateToDisposedMedicine() {
         if (getActivity() instanceof PharmacistDashboardActivity) {
-            ((PharmacistDashboardActivity) getActivity()).loadFragment(new DrugInteractionsFragment());
+            ((PharmacistDashboardActivity) getActivity()).loadFragment(new DisposedMedicineFragment());
         }
     }
 
@@ -159,13 +161,85 @@ public class PharmacistDashboardFragment extends Fragment {
     }
 
     private int getLowStockMedicinesCount() {
-        // Get real count from database
-        return databaseHelper.getLowStockMedicinesCount();
+        // Get real count using configurable minimum stock
+        if (getContext() == null || databaseHelper == null) {
+            return 0;
+        }
+        int minimumStock = PharmacistSettingsFragment.getMinimumStockQuantity(getContext());
+        List<com.example.h_cas.models.Medicine> allMedicines = databaseHelper.getAllMedicines();
+        if (allMedicines == null) {
+            return 0;
+        }
+        int count = 0;
+        for (com.example.h_cas.models.Medicine medicine : allMedicines) {
+            if (medicine != null && medicine.isLowStock(minimumStock)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private int getExpiringSoonCount() {
-        // Get real count from database
-        return databaseHelper.getExpiringSoonMedicinesCount();
+        // Get real count using configurable threshold
+        if (getContext() == null || databaseHelper == null) {
+            return 0;
+        }
+        int thresholdMonths = PharmacistSettingsFragment.getExpiryNotificationMonths(getContext());
+        List<com.example.h_cas.models.Medicine> allMedicines = databaseHelper.getAllMedicines();
+        if (allMedicines == null) {
+            return 0;
+        }
+        int count = 0;
+        for (com.example.h_cas.models.Medicine medicine : allMedicines) {
+            if (medicine != null && isExpiringSoon(medicine, thresholdMonths)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Check if a medicine is expiring soon based on the configurable threshold
+     */
+    private boolean isExpiringSoon(com.example.h_cas.models.Medicine medicine, int thresholdMonths) {
+        if (medicine == null || medicine.getExpiryDate() == null || medicine.getExpiryDate().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            // Parse expiry date (format: YYYY-MM-DD)
+            String expiryDateStr = medicine.getExpiryDate().trim();
+            String[] dateParts = expiryDateStr.split("-");
+            
+            if (dateParts.length != 3) {
+                return false;
+            }
+            
+            int expiryYear = Integer.parseInt(dateParts[0]);
+            int expiryMonth = Integer.parseInt(dateParts[1]);
+            int expiryDay = Integer.parseInt(dateParts[2]);
+            
+            // Get current date
+            java.util.Calendar currentCal = java.util.Calendar.getInstance();
+            int currentYear = currentCal.get(java.util.Calendar.YEAR);
+            int currentMonth = currentCal.get(java.util.Calendar.MONTH) + 1; // Calendar months are 0-based
+            int currentDay = currentCal.get(java.util.Calendar.DAY_OF_MONTH);
+            
+            // Calculate months difference
+            int yearDiff = expiryYear - currentYear;
+            int monthDiff = (yearDiff * 12) + (expiryMonth - currentMonth);
+            
+            // Adjust for day difference
+            if (monthDiff > 0 && expiryDay < currentDay) {
+                monthDiff--;
+            }
+            
+            // Check if within threshold
+            return monthDiff >= 0 && monthDiff <= thresholdMonths;
+            
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private int getPendingReviewsCount() {

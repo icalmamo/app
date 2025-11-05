@@ -23,6 +23,9 @@ public class Employee {
     private String specialization;
     private String experience;
     private String department;
+    
+    // Profile picture
+    private String profilePictureUrl;
 
     // Default constructor
     public Employee() {
@@ -162,6 +165,14 @@ public class Employee {
 
     public void setDepartment(String department) {
         this.department = department;
+    }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
     }
 
     // Utility methods

@@ -27,4 +27,7 @@
     <!-- Pharmacist Theme Colors -->
     <color name="pharmacist_primary">#4CAF50</color>
     <color name="pharmacist_secondary">#388E3C</color>
+    
+    <!-- Info Card Background (10% opacity of primary blue) -->
+    <color name="info_card_background">#1A1976D2</color>
 </resources>

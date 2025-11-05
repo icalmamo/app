@@ -83,6 +83,8 @@
     <string name="nav_pharmacist_dashboard">Dashboard</string>
     <string name="nav_medication_dispensing">Dispensing</string>
     <string name="nav_inventory">Inventory</string>
-    <string name="nav_drug_interactions">Drug Interactions</string>
+    <string name="nav_disposed_medicine">Disposed Medicine</string>
+    <string name="nav_medicine_history">History of Medicine</string>
     <string name="nav_prescription_verification">Prescription Verification</string>
+    <string name="nav_pharmacist_settings">Settings</string>
 </resources>

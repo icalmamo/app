@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "393148175975",
+    "project_id": "hcas-c83fa",
+    "storage_bucket": "hcas-c83fa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:393148175975:android:dd29df276f030f429de6c2",
+        "android_client_info": {
+          "package_name": "com.example.h_cas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjZ35vrTNejZgITROC7ZiiChugQmK2KUI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

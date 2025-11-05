@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@color/background_light">
+
+    <!-- Header Section -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Configure pharmacy settings and preferences"
+            android:textSize="14sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="16dp" />
+
+    </LinearLayout>
+
+    <!-- Settings Card -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/settingsCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="2dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Section Title -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Inventory Settings"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Current Minimum Stock Display -->
+            <TextView
+                android:id="@+id/currentMinimumStockText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Current Minimum Stock: 10"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="16dp"
+                android:padding="12dp"
+                android:background="@drawable/dropdown_background" />
+
+            <!-- Minimum Stock Input -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:hint="Minimum Stock Quantity"
+                app:boxStrokeColor="@color/primary_blue"
+                app:hintTextColor="@color/primary_blue"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/minimumStockInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLines="1"
+                    android:hint="Enter minimum stock quantity" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Info Text -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="When medicine stock falls below this quantity, it will be marked as low stock."
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Divider -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/card_border_gray"
+                android:layout_marginBottom="24dp" />
+
+            <!-- Expiring Soon Threshold Section -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Expiring Soon Threshold"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Current Expiring Soon Threshold Display -->
+            <TextView
+                android:id="@+id/currentExpiryNotificationDaysText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Current Threshold: 1 month"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="16dp"
+                android:padding="12dp"
+                android:background="@drawable/dropdown_background" />
+
+            <!-- Expiring Soon Threshold Months Input -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:hint="Months Before Expiry"
+                app:boxStrokeColor="@color/primary_blue"
+                app:hintTextColor="@color/primary_blue"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/expiryNotificationDaysInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLines="1"
+                    android:hint="Enter months before expiry" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Info Text for Expiry -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Medicines that will expire within this number of months (or less) will be marked as 'Expiring Soon'."
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Action Buttons -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/saveSettingsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="Save Settings"
+                    android:textSize="14sp"
+                    app:icon="@drawable/ic_save"
+                    app:iconSize="18dp"
+                    app:iconPadding="4dp"
+                    style="@style/Widget.Material3.Button" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetSettingsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="Reset to Default"
+                    android:textSize="14sp"
+                    app:icon="@drawable/ic_refresh"
+                    app:iconSize="18dp"
+                    app:iconPadding="4dp"
+                    style="@style/Widget.Material3.Button.OutlinedButton" />
+
+            </LinearLayout>
+
+            <!-- Test Firebase Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/testFirebaseButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="🧪 Test Firebase Sync"
+                android:textSize="14sp"
+                app:icon="@drawable/ic_settings"
+                app:iconSize="18dp"
+                app:iconPadding="4dp"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Info Section -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="1dp"
+        app:cardBackgroundColor="@color/info_card_background">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ℹ️ Information"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/primary_blue"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="• Minimum stock quantity determines when medicines are flagged as low stock\n\n• Low stock alerts help ensure medicines are restocked on time\n\n• Default minimum stock is 10 units\n\n• Expiring soon threshold determines how many months before expiry medicines are marked as 'Expiring Soon'\n\n• Example: If set to 3 months, all medicines expiring within 3 months or less will be flagged\n\n• Default threshold is 1 month before expiry"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"
+                android:lineSpacingMultiplier="1.3" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+</LinearLayout>

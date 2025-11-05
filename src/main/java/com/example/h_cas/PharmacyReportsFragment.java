@@ -213,7 +213,6 @@ public class PharmacyReportsFragment extends Fragment {
 
         class ReportViewHolder extends RecyclerView.ViewHolder {
             private MaterialCardView cardView;
-            private TextView reportIconText;
             private TextView reportTitleText;
             private TextView reportSummaryText;
             private TextView reportTimeFrameText;
@@ -222,7 +221,6 @@ public class PharmacyReportsFragment extends Fragment {
             public ReportViewHolder(@NonNull View itemView) {
                 super(itemView);
                 cardView = itemView.findViewById(R.id.reportCardView);
-                reportIconText = itemView.findViewById(R.id.reportIconText);
                 reportTitleText = itemView.findViewById(R.id.reportTitleText);
                 reportSummaryText = itemView.findViewById(R.id.reportSummaryText);
                 reportTimeFrameText = itemView.findViewById(R.id.reportTimeFrameText);
@@ -230,15 +228,39 @@ public class PharmacyReportsFragment extends Fragment {
             }
 
             public void bind(ReportItem report) {
-                reportIconText.setText(report.getIcon());
+                // Set title
                 reportTitleText.setText(report.getTitle());
-                reportSummaryText.setText(report.getSummary());
-                reportTimeFrameText.setText(report.getTimeFrame());
-                reportDescriptionText.setText(report.getDescription());
+                
+                // Set time frame (subtitle)
+                if (report.getTimeFrame() != null && !report.getTimeFrame().isEmpty()) {
+                    reportTimeFrameText.setText(report.getTimeFrame());
+                    reportTimeFrameText.setVisibility(View.VISIBLE);
+                } else {
+                    reportTimeFrameText.setVisibility(View.GONE);
+                }
+                
+                // Set summary (description)
+                if (report.getSummary() != null && !report.getSummary().isEmpty()) {
+                    reportSummaryText.setText(report.getSummary());
+                    reportSummaryText.setVisibility(View.VISIBLE);
+                } else {
+                    reportSummaryText.setVisibility(View.GONE);
+                }
+                
+                // Set description (details)
+                if (report.getDescription() != null && !report.getDescription().isEmpty()) {
+                    reportDescriptionText.setText(report.getDescription());
+                    reportDescriptionText.setVisibility(View.VISIBLE);
+                } else {
+                    reportDescriptionText.setVisibility(View.GONE);
+                }
             }
         }
     }
 }
+
+
+
 
 
 
