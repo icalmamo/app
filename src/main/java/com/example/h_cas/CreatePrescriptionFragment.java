@@ -79,10 +79,18 @@ public class CreatePrescriptionFragment extends Fragment {
     }
 
     private void getCurrentDoctorInfo() {
-        // For now, use default doctor info
-        // In a real system, this would get the logged-in doctor's info
-        currentDoctorId = "DOC001";
-        currentDoctorName = "Dr. John Smith";
+        // Get doctor information from parent activity
+        if (getActivity() instanceof DoctorDashboardActivity) {
+            DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
+            currentDoctorId = activity.getCurrentDoctor().getEmployeeId();
+            String firstName = activity.getCurrentDoctor().getFirstName();
+            String lastName = activity.getCurrentDoctor().getLastName();
+            currentDoctorName = firstName + " " + lastName;
+        } else {
+            // Fallback to default if not in DoctorDashboardActivity
+            currentDoctorId = "DOC001";
+            currentDoctorName = "Dr. Unknown";
+        }
     }
 
     private void setupClickListeners() {

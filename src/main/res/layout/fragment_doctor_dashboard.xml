@@ -79,6 +79,7 @@
             android:orientation="vertical">
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/quickActionViewPatients"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_marginBottom="8dp"
@@ -91,6 +92,7 @@
                 android:textColor="@color/white" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/quickActionNewDiagnosis"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_marginBottom="8dp"
@@ -103,6 +105,7 @@
                 android:textColor="@color/white" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/quickActionWritePrescription"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:layout_marginBottom="8dp"
@@ -119,22 +122,3 @@
     </LinearLayout>
 
 </ScrollView>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

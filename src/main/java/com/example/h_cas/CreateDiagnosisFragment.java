@@ -14,6 +14,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.models.Patient;
 
 /**
  * CreateDiagnosisFragment allows doctors to create diagnoses for patients.
@@ -82,11 +83,59 @@ public class CreateDiagnosisFragment extends Fragment {
         String notes = getText(notesInput);
 
         if (validateInputs(patientId, diagnosis, symptoms, treatmentPlan)) {
-            // For now, just show success message
-            // In a real system, this would save to diagnoses table
-            showToast("✅ Diagnosis created successfully!");
-            clearForm();
+            // Get patient from database
+            com.example.h_cas.models.Patient patient = databaseHelper.getPatientById(patientId);
+            if (patient == null) {
+                showToast("❌ Patient not found. Please check Patient ID.");
+                return;
+            }
+            
+            // Update patient's medical history with diagnosis information
+            StringBuilder medicalHistory = new StringBuilder();
+            if (patient.getMedicalHistory() != null && !patient.getMedicalHistory().isEmpty()) {
+                medicalHistory.append(patient.getMedicalHistory()).append("\n\n");
+            }
+            
+            medicalHistory.append("=== DIAGNOSIS ===\n");
+            medicalHistory.append("Date: ").append(getCurrentDateTime()).append("\n");
+            medicalHistory.append("Diagnosis: ").append(diagnosis).append("\n");
+            medicalHistory.append("Symptoms: ").append(symptoms).append("\n");
+            medicalHistory.append("Treatment Plan: ").append(treatmentPlan).append("\n");
+            if (followUp != null && !followUp.isEmpty()) {
+                medicalHistory.append("Follow-up: ").append(followUp).append("\n");
+            }
+            if (notes != null && !notes.isEmpty()) {
+                medicalHistory.append("Notes: ").append(notes).append("\n");
+            }
+            
+            // Update patient's medical history in database
+            patient.setMedicalHistory(medicalHistory.toString());
+            
+            // Update symptoms description as well
+            if (patient.getSymptomsDescription() == null || patient.getSymptomsDescription().isEmpty()) {
+                patient.setSymptomsDescription(symptoms);
+            } else {
+                patient.setSymptomsDescription(patient.getSymptomsDescription() + "\n" + symptoms);
+            }
+            
+            // Save updated patient to database
+            boolean success = databaseHelper.updatePatient(patient);
+            
+            if (success) {
+                showToast("✅ Diagnosis recorded successfully!");
+                clearForm();
+            } else {
+                showToast("❌ Failed to save diagnosis. Please try again.");
+            }
+            
+            // Note: For better organization, consider creating a separate diagnoses table
+            // For now, diagnosis information is stored in patient's medical history
         }
+    }
+    
+    private String getCurrentDateTime() {
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault());
+        return sdf.format(new java.util.Date());
     }
 
     private boolean validateInputs(String patientId, String diagnosis, String symptoms, String treatmentPlan) {
@@ -130,6 +179,7 @@ public class CreateDiagnosisFragment extends Fragment {
         Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
     }
 }
+
 
 
 

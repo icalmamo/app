@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.activity.EdgeToEdge;
@@ -41,6 +42,7 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
     private String loggedInFullName;
     private String loggedInUsername;
     private String loggedInRole;
+    private ActionBarDrawerToggle drawerToggle;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,7 +50,10 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_doctor_dashboard);
         
-        // Apply window insets for edge-to-edge display
+        // Initialize views first
+        initializeViews();
+        
+        // Apply window insets for edge-to-edge display (same as NurseDashboardActivity)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.doctorMainLayout), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -56,7 +61,6 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         });
 
         initializeDatabase();
-        initializeViews();
         setupToolbar();
         setupNavigationDrawer();
         setupNavigationHeader();
@@ -100,13 +104,25 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
     private void setupToolbar() {
         setSupportActionBar(toolbar);
         
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+        // Create drawer toggle FIRST - this handles the hamburger icon
+        drawerToggle = new ActionBarDrawerToggle(
                 this, drawerLayout, toolbar, 
                 R.string.navigation_drawer_open, 
                 R.string.navigation_drawer_close
         );
-        drawerLayout.addDrawerListener(toggle);
-        toggle.syncState();
+        drawerLayout.addDrawerListener(drawerToggle);
+        
+        // CRITICAL: Enable home button AFTER creating toggle - this makes hamburger icon clickable
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setHomeButtonEnabled(true);
+        }
+        
+        // Sync state to show hamburger icon - MUST be called after setDisplayHomeAsUpEnabled
+        drawerToggle.syncState();
+        
+        // Keep drawer unlocked so hamburger button works
+        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START);
     }
 
     /**
@@ -126,20 +142,53 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         View headerView = navigationView.getHeaderView(0);
         TextView doctorNameTextView = headerView.findViewById(R.id.doctorNameTextView);
         TextView doctorRoleTextView = headerView.findViewById(R.id.doctorRoleTextView);
+        ImageView doctorAvatarImageView = headerView.findViewById(R.id.doctorAvatarImageView);
         
         // Use the actual logged-in doctor's name exactly as entered by admin
         if (loggedInFullName != null && !loggedInFullName.isEmpty()) {
             doctorNameTextView.setText(loggedInFullName);
         } else {
-        
             doctorNameTextView.setText(currentDoctor.getFullName());
         }
         
-        if (loggedInRole != null && !loggedInRole.isEmpty()) {
-            doctorRoleTextView.setText(loggedInRole);
-        } else {
-            doctorRoleTextView.setText("Medical Doctor");
+        // Always set role as "Doctor" to match admin design
+        doctorRoleTextView.setText("Doctor");
+        
+        // Load profile picture if available
+        if (currentDoctor != null && currentDoctor.getProfilePictureUrl() != null && !currentDoctor.getProfilePictureUrl().isEmpty()) {
+            loadProfilePicture(doctorAvatarImageView, currentDoctor.getProfilePictureUrl());
         }
+        
+        // Make header clickable to open profile (optional enhancement)
+        View profileSection = headerView.findViewById(R.id.profileSection);
+        if (profileSection != null) {
+            profileSection.setOnClickListener(v -> {
+                // Navigate to doctor profile
+                DoctorProfileFragment profileFragment = new DoctorProfileFragment();
+                Bundle args = new Bundle();
+                args.putString("FULL_NAME", loggedInFullName);
+                args.putString("USERNAME", loggedInUsername);
+                args.putString("ROLE", loggedInRole);
+                args.putString("EMPLOYEE_ID", currentDoctor.getEmployeeId());
+                args.putString("FIRST_NAME", currentDoctor.getFirstName());
+                args.putString("LAST_NAME", currentDoctor.getLastName());
+                args.putString("EMAIL", currentDoctor.getEmail());
+                profileFragment.setArguments(args);
+                loadFragment(profileFragment);
+                toolbar.setTitle("Doctor's Profile");
+                updateNavigationSelection(R.id.nav_doctor_profile);
+                drawerLayout.closeDrawer(GravityCompat.START);
+            });
+        }
+    }
+    
+    /**
+     * Load profile picture from URL
+     */
+    private void loadProfilePicture(ImageView imageView, String imageUrl) {
+        // TODO: Implement image loading from URL if needed
+        // For now, use default avatar
+        // You can use Glide, Picasso, or similar library here
     }
 
     /**
@@ -151,6 +200,84 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.replace(R.id.fragmentContainer, fragment);
         transaction.commit();
+        
+        // Show back button if not on dashboard, show hamburger menu if on dashboard
+        updateToolbarNavigation(fragment instanceof DoctorDashboardFragment);
+    }
+    
+    /**
+     * Update toolbar navigation icon based on current fragment
+     * @param isDashboard true if on dashboard, false otherwise
+     */
+    private void updateToolbarNavigation(boolean isDashboard) {
+        if (isDashboard) {
+            // On dashboard - let ActionBarDrawerToggle handle everything normally
+            // Don't interfere with the toggle - just ensure drawer is unlocked
+            drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START);
+            drawerToggle.setDrawerIndicatorEnabled(true);
+            toolbar.setNavigationIcon(null); // Let toggle draw the hamburger
+            toolbar.setNavigationOnClickListener(null); // Let toggle handle clicks
+            
+            // Ensure home button is enabled
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+                getSupportActionBar().setHomeButtonEnabled(true);
+            }
+            
+            // Sync state - this will show the hamburger icon
+            drawerToggle.syncState();
+        } else {
+            // On other fragments - show back button instead of hamburger
+            drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.START);
+            drawerToggle.setDrawerIndicatorEnabled(false);
+            toolbar.setNavigationIcon(R.drawable.ic_arrow_back);
+            toolbar.setNavigationOnClickListener(v -> {
+                loadFragment(new DoctorDashboardFragment());
+                toolbar.setTitle("Doctor Dashboard");
+                updateNavigationSelection(R.id.nav_doctor_dashboard);
+            });
+        }
+    }
+    
+    @Override
+    public boolean onOptionsItemSelected(@NonNull android.view.MenuItem item) {
+        // Let ActionBarDrawerToggle handle hamburger button - this is the standard way
+        // It will automatically open/close the drawer when hamburger is clicked
+        if (drawerToggle != null && drawerToggle.onOptionsItemSelected(item)) {
+            return true;
+        }
+        
+        // Handle back button for non-dashboard fragments
+        if (item.getItemId() == android.R.id.home) {
+            Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragmentContainer);
+            if (!(currentFragment instanceof DoctorDashboardFragment)) {
+                // Not on dashboard - handle as back button
+                loadFragment(new DoctorDashboardFragment());
+                toolbar.setTitle("Doctor Dashboard");
+                updateNavigationSelection(R.id.nav_doctor_dashboard);
+                return true;
+            }
+        }
+        
+        return super.onOptionsItemSelected(item);
+    }
+    
+    @Override
+    protected void onPostCreate(Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        // Sync the toggle state after onRestoreInstanceState has occurred
+        if (drawerToggle != null) {
+            drawerToggle.syncState();
+        }
+    }
+    
+    @Override
+    public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // Sync the toggle state after configuration change
+        if (drawerToggle != null) {
+            drawerToggle.onConfigurationChanged(newConfig);
+        }
     }
 
     @Override
@@ -203,6 +330,27 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         startActivity(intent);
         finish();
     }
+    
+    /**
+     * Get current doctor employee object
+     */
+    public Employee getCurrentDoctor() {
+        return currentDoctor;
+    }
+    
+    /**
+     * Get logged in full name
+     */
+    public String getLoggedInFullName() {
+        return loggedInFullName;
+    }
+    
+    /**
+     * Update navigation drawer selection
+     */
+    public void updateNavigationSelection(int itemId) {
+        navigationView.setCheckedItem(itemId);
+    }
 
     /**
      * Reset navigation scroll position to top
@@ -225,9 +373,21 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
 
     @Override
     public void onBackPressed() {
+        // Check if drawer is open
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START);
+            return;
+        }
+        
+        // Check if we're on a fragment other than dashboard
+        Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragmentContainer);
+        if (currentFragment != null && !(currentFragment instanceof DoctorDashboardFragment)) {
+            // Navigate back to dashboard
+            loadFragment(new DoctorDashboardFragment());
+            toolbar.setTitle("Doctor Dashboard");
+            updateNavigationSelection(R.id.nav_doctor_dashboard);
         } else {
+            // On dashboard, exit app or handle normally
             super.onBackPressed();
         }
     }

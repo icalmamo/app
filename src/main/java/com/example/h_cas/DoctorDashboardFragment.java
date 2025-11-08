@@ -13,6 +13,11 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.button.MaterialButton;
+
+import com.example.h_cas.database.HCasDatabaseHelper;
+
+import java.util.List;
 
 /**
  * DoctorDashboardFragment displays the main dashboard for doctors
@@ -22,34 +27,129 @@ public class DoctorDashboardFragment extends Fragment {
 
     private RecyclerView statsRecyclerView;
     private TextView welcomeTextView;
+    private HCasDatabaseHelper databaseHelper;
+    private MaterialButton quickActionViewPatients;
+    private MaterialButton quickActionNewDiagnosis;
+    private MaterialButton quickActionWritePrescription;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_doctor_dashboard, container, false);
         
+        initializeDatabase();
         initializeViews(view);
         setupStatsRecyclerView();
+        setupQuickActionButtons(view);
         
         return view;
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Refresh stats when returning to this fragment
+        if (databaseHelper != null) {
+            setupStatsRecyclerView();
+        }
+    }
+
+    private void initializeDatabase() {
+        databaseHelper = new HCasDatabaseHelper(getContext());
     }
 
     private void initializeViews(View view) {
         statsRecyclerView = view.findViewById(R.id.statsRecyclerView);
         welcomeTextView = view.findViewById(R.id.welcomeTextView);
+        quickActionViewPatients = view.findViewById(R.id.quickActionViewPatients);
+        quickActionNewDiagnosis = view.findViewById(R.id.quickActionNewDiagnosis);
+        quickActionWritePrescription = view.findViewById(R.id.quickActionWritePrescription);
         
-        welcomeTextView.setText("Welcome to Doctor Dashboard");
+        // Get doctor name from activity if available
+        if (getActivity() instanceof DoctorDashboardActivity) {
+            DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
+            String doctorName = activity.getLoggedInFullName();
+            if (doctorName != null && !doctorName.isEmpty()) {
+                welcomeTextView.setText("Welcome, " + doctorName);
+            } else {
+                welcomeTextView.setText("Welcome to Doctor Dashboard");
+            }
+        } else {
+            welcomeTextView.setText("Welcome to Doctor Dashboard");
+        }
+    }
+    
+    /**
+     * Setup quick action buttons with click listeners
+     */
+    private void setupQuickActionButtons(View view) {
+        // View Patients - Navigate to Registered Patients
+        quickActionViewPatients.setOnClickListener(v -> {
+            if (getActivity() instanceof DoctorDashboardActivity) {
+                DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
+                activity.loadFragment(new RegisteredPatientsFragment());
+                activity.getSupportActionBar().setTitle("Registered Patients");
+                // Update navigation drawer selection
+                activity.updateNavigationSelection(R.id.nav_registered_patients);
+            }
+        });
+        
+        // New Diagnosis - Navigate to Create Diagnosis
+        quickActionNewDiagnosis.setOnClickListener(v -> {
+            if (getActivity() instanceof DoctorDashboardActivity) {
+                DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
+                CreateDiagnosisFragment diagnosisFragment = new CreateDiagnosisFragment();
+                activity.loadFragment(diagnosisFragment);
+                activity.getSupportActionBar().setTitle("Create Diagnosis");
+            }
+        });
+        
+        // Write Prescription - Navigate to Create Prescription
+        quickActionWritePrescription.setOnClickListener(v -> {
+            if (getActivity() instanceof DoctorDashboardActivity) {
+                DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
+                CreatePrescriptionFragment prescriptionFragment = new CreatePrescriptionFragment();
+                activity.loadFragment(prescriptionFragment);
+                activity.getSupportActionBar().setTitle("Create Prescription");
+            }
+        });
     }
 
     private void setupStatsRecyclerView() {
-        // Create doctor-specific stats data
-        String[] statsLabels = {"Active Patients", "Today's Appointments", "Pending Diagnoses", "Prescriptions Written", "Emergency Cases", "Follow-ups Due"};
-        String[] statsValues = {"12", "8", "3", "15", "2", "5"};
-        int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.accent_blue, R.color.error_red, R.color.text_secondary};
+        // Get real statistics from database
+        int activePatients = getActivePatientsCount();
+        int todaysCases = databaseHelper.getTodaysCasesCount();
+        int pendingDiagnoses = databaseHelper.getPendingReviewsCount();
+        int prescriptionsWritten = getPrescriptionsCount();
+        
+        // Create doctor-specific stats data with real values (removed Follow-ups Due and Emergency Cases)
+        String[] statsLabels = {"Active Patients", "Total Patients", "Pending Diagnoses", "Prescriptions Written"};
+        String[] statsValues = {
+            String.valueOf(activePatients),
+            String.valueOf(todaysCases),
+            String.valueOf(pendingDiagnoses),
+            String.valueOf(prescriptionsWritten)
+        };
+        int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.accent_blue};
 
         StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
         statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
         statsRecyclerView.setAdapter(adapter);
+    }
+    
+    /**
+     * Get count of active patients (patients without prescriptions)
+     */
+    private int getActivePatientsCount() {
+        return databaseHelper.getPendingReviewsCount();
+    }
+    
+    /**
+     * Get total prescriptions count
+     */
+    private int getPrescriptionsCount() {
+        List<com.example.h_cas.models.Prescription> prescriptions = databaseHelper.getAllPrescriptions();
+        return prescriptions != null ? prescriptions.size() : 0;
     }
 
     // Simple RecyclerView adapter for stats cards
@@ -97,6 +197,7 @@ public class DoctorDashboardFragment extends Fragment {
         }
     }
 }
+
 
 
 

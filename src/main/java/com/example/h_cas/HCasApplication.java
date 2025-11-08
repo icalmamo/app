@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.example.h_cas.database.FirebaseSyncManager;
 
@@ -41,6 +42,16 @@ public class HCasApplication extends Application {
                         Log.d(TAG, "Firebase initialized successfully");
                     } else {
                         Log.d(TAG, "Firebase already initialized");
+                    }
+                    
+                    // Enable persistence BEFORE any other FirebaseDatabase usage
+                    // This must be done before any getInstance() calls that use the database
+                    try {
+                        FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
+                        database.setPersistenceEnabled(true);
+                        Log.d(TAG, "✅ Firebase Realtime Database persistence enabled");
+                    } catch (Exception e) {
+                        Log.w(TAG, "Could not enable persistence (may already be set): " + e.getMessage());
                     }
                     
                     // Authenticate with Firebase anonymously (for Realtime Database access)

@@ -23,8 +23,7 @@
             android:elevation="4dp"
             app:layout_constraintTop_toTopOf="parent"
             app:title="Doctor Dashboard"
-            app:titleTextColor="@color/white"
-            app:navigationIcon="@drawable/ic_menu" />
+            app:titleTextColor="@color/white" />
 
         <!-- Fragment Container -->
         <FrameLayout
@@ -51,22 +50,3 @@
         app:itemTextColor="@color/nav_item_color" />
 
 </androidx.drawerlayout.widget.DrawerLayout>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
