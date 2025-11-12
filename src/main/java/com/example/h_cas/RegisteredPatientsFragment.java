@@ -65,39 +65,37 @@ public class RegisteredPatientsFragment extends Fragment {
         patientAdapter = new PatientAdapter();
         patientsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         patientsRecyclerView.setAdapter(patientAdapter);
+        // Performance optimizations
+        patientsRecyclerView.setHasFixedSize(true); // RecyclerView size doesn't change
+        patientsRecyclerView.setItemViewCacheSize(20); // Cache more views for smoother scrolling
     }
 
     private void loadPatients() {
-        // Get all patients
-        List<Patient> allPatients = databaseHelper.getAllPatients();
+        // Show loading state
+        emptyStateTextView.setVisibility(View.GONE);
+        patientsRecyclerView.setVisibility(View.GONE);
         
-        // Get all prescriptions to find patients who have received prescriptions
-        List<Prescription> allPrescriptions = databaseHelper.getAllPrescriptions();
-        
-        // Create a set of patient IDs who have prescriptions
-        List<String> patientsWithPrescriptions = new ArrayList<>();
-        for (Prescription prescription : allPrescriptions) {
-            if (!patientsWithPrescriptions.contains(prescription.getPatientId())) {
-                patientsWithPrescriptions.add(prescription.getPatientId());
-            }
-        }
-        
-        // Filter out patients who have prescriptions (they should be in Patient History instead)
-        List<Patient> patientsWithoutPrescriptions = new ArrayList<>();
-        for (Patient patient : allPatients) {
-            if (!patientsWithPrescriptions.contains(patient.getPatientId())) {
-                patientsWithoutPrescriptions.add(patient);
-            }
-        }
-        
-        if (patientsWithoutPrescriptions.isEmpty()) {
-            emptyStateTextView.setVisibility(View.VISIBLE);
-            patientsRecyclerView.setVisibility(View.GONE);
-        } else {
-            emptyStateTextView.setVisibility(View.GONE);
-            patientsRecyclerView.setVisibility(View.VISIBLE);
-            patientAdapter.setPatients(patientsWithoutPrescriptions);
-        }
+        // Load patients in background thread to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            // Use optimized single query instead of loading all data then filtering
+            List<Patient> patientsWithoutPrescriptions = databaseHelper.getPatientsWithoutPrescriptions();
+            
+            // Update UI on main thread
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                if (getContext() == null || getView() == null) {
+                    return; // Fragment is detached
+                }
+                
+                if (patientsWithoutPrescriptions.isEmpty()) {
+                    emptyStateTextView.setVisibility(View.VISIBLE);
+                    patientsRecyclerView.setVisibility(View.GONE);
+                } else {
+                    emptyStateTextView.setVisibility(View.GONE);
+                    patientsRecyclerView.setVisibility(View.VISIBLE);
+                    patientAdapter.setPatients(patientsWithoutPrescriptions);
+                }
+            });
+        });
     }
 
     @Override
@@ -108,11 +106,54 @@ public class RegisteredPatientsFragment extends Fragment {
 
     // RecyclerView Adapter for patients
     private class PatientAdapter extends RecyclerView.Adapter<PatientAdapter.PatientViewHolder> {
-        private List<Patient> patients;
+        private List<Patient> patients = new ArrayList<>();
 
-        public void setPatients(List<Patient> patients) {
-            this.patients = patients;
-            notifyDataSetChanged();
+        public void setPatients(List<Patient> newPatients) {
+            if (newPatients == null) {
+                newPatients = new ArrayList<>();
+            }
+            
+            // Use DiffUtil for efficient updates (only updates changed items)
+            androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(new PatientDiffCallback(this.patients, newPatients));
+            
+            this.patients.clear();
+            this.patients.addAll(newPatients);
+            diffResult.dispatchUpdatesTo(this);
+        }
+        
+        // DiffUtil callback for efficient RecyclerView updates
+        private class PatientDiffCallback extends androidx.recyclerview.widget.DiffUtil.Callback {
+            private List<Patient> oldList;
+            private List<Patient> newList;
+            
+            public PatientDiffCallback(List<Patient> oldList, List<Patient> newList) {
+                this.oldList = oldList;
+                this.newList = newList;
+            }
+            
+            @Override
+            public int getOldListSize() {
+                return oldList.size();
+            }
+            
+            @Override
+            public int getNewListSize() {
+                return newList.size();
+            }
+            
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldList.get(oldItemPosition).getPatientId().equals(newList.get(newItemPosition).getPatientId());
+            }
+            
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                Patient oldPatient = oldList.get(oldItemPosition);
+                Patient newPatient = newList.get(newItemPosition);
+                return oldPatient.getFirstName().equals(newPatient.getFirstName()) &&
+                       oldPatient.getLastName().equals(newPatient.getLastName());
+            }
         }
 
         @NonNull

@@ -166,17 +166,8 @@ public class PharmacistDashboardFragment extends Fragment {
             return 0;
         }
         int minimumStock = PharmacistSettingsFragment.getMinimumStockQuantity(getContext());
-        List<com.example.h_cas.models.Medicine> allMedicines = databaseHelper.getAllMedicines();
-        if (allMedicines == null) {
-            return 0;
-        }
-        int count = 0;
-        for (com.example.h_cas.models.Medicine medicine : allMedicines) {
-            if (medicine != null && medicine.isLowStock(minimumStock)) {
-                count++;
-            }
-        }
-        return count;
+        // Use optimized query instead of loading all medicines
+        return databaseHelper.getLowStockMedicinesCount(minimumStock);
     }
 
     private int getExpiringSoonCount() {
@@ -185,18 +176,10 @@ public class PharmacistDashboardFragment extends Fragment {
             return 0;
         }
         int thresholdMonths = PharmacistSettingsFragment.getExpiryNotificationMonths(getContext());
-        List<com.example.h_cas.models.Medicine> allMedicines = databaseHelper.getAllMedicines();
-        if (allMedicines == null) {
-            return 0;
-        }
-        int count = 0;
-        for (com.example.h_cas.models.Medicine medicine : allMedicines) {
-            if (medicine != null && isExpiringSoon(medicine, thresholdMonths)) {
-                count++;
-            }
-        }
-        return count;
+        // Use optimized query instead of loading all medicines
+        return databaseHelper.getExpiringSoonMedicinesCount(thresholdMonths);
     }
+    
 
     /**
      * Check if a medicine is expiring soon based on the configurable threshold

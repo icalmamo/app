@@ -133,43 +133,50 @@ public class NewEnhancedInventoryFragment extends Fragment {
                 return;
             }
             
-            // Load medicines from database (exclude expired medicines - they should only be in Disposed Medicine section)
-            allMedicines.clear();
-            List<Medicine> medicines = databaseHelper.getAllMedicines();
-            if (medicines != null) {
-                for (Medicine medicine : medicines) {
-                    if (medicine != null && !isExpired(medicine)) {
-                        allMedicines.add(medicine);
+            // Load medicines in background to avoid blocking UI
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                // Load medicines from database (exclude expired medicines - they should only be in Disposed Medicine section)
+                List<Medicine> medicines = databaseHelper.getAllMedicines();
+                List<Medicine> validMedicines = new ArrayList<>();
+                
+                if (medicines != null) {
+                    for (Medicine medicine : medicines) {
+                        if (medicine != null && !isExpired(medicine)) {
+                            validMedicines.add(medicine);
+                        }
                     }
                 }
-            }
-            
-            // If no medicines in database, add sample medicines for demo
-            if (allMedicines.isEmpty()) {
-                addSampleMedicines();
-            }
-            
-            // Reset filters
-            showingLowStock = false;
-            showingExpiringSoon = false;
-            updateButtonStates();
-            
-            filteredMedicines.clear();
-            filteredMedicines.addAll(allMedicines);
-            
-            if (medicineAdapter != null) {
-                medicineAdapter.notifyDataSetChanged();
-            }
-            
-            updateEmptyState();
-            
-            if (getContext() != null) {
-                Toast.makeText(getContext(), "📦 Inventory refreshed: " + allMedicines.size() + " medicines", Toast.LENGTH_SHORT).show();
-            }
+                
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (getContext() == null || getView() == null) {
+                        return; // Fragment is detached
+                    }
+                    
+                    allMedicines.clear();
+                    allMedicines.addAll(validMedicines);
+                    
+                    // If no medicines in database, add sample medicines for demo
+                    if (allMedicines.isEmpty()) {
+                        addSampleMedicines();
+                    }
+                    
+                    // Reset filters
+                    showingLowStock = false;
+                    showingExpiringSoon = false;
+                    updateButtonStates();
+                    
+                    filteredMedicines.clear();
+                    filteredMedicines.addAll(allMedicines);
+                    
+                    if (medicineAdapter != null) {
+                        medicineAdapter.notifyDataSetChanged();
+                    }
+                    
+                    updateEmptyState();
+                });
+            });
         } catch (Exception e) {
-            if (getContext() != null) {
-                Toast.makeText(getContext(), "❌ Error loading inventory: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
             e.printStackTrace();
         }
     }

@@ -87,18 +87,32 @@ public class PatientMonitoringFragment extends Fragment {
         
         recyclerViewPatients.setLayoutManager(new LinearLayoutManager(getContext()));
         recyclerViewPatients.setAdapter(patientAdapter);
+        // Performance optimizations
+        recyclerViewPatients.setHasFixedSize(true); // RecyclerView size doesn't change
+        recyclerViewPatients.setItemViewCacheSize(20); // Cache more views for smoother scrolling
     }
     
     /**
      * Load patients from database
      */
     private void loadPatients() {
-        patientList.clear();
-        patientList.addAll(databaseHelper.getAllPatients());
-        patientAdapter.notifyDataSetChanged();
-        
-        updatePatientCount();
-        updateMonitoringStatus();
+        // Load patients in background to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            List<Patient> patients = databaseHelper.getAllPatients();
+            
+            // Update UI on main thread
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                if (getContext() == null || getView() == null) {
+                    return; // Fragment is detached
+                }
+                patientList.clear();
+                patientList.addAll(patients);
+                patientAdapter.notifyDataSetChanged();
+                
+                updatePatientCount();
+                updateMonitoringStatus();
+            });
+        });
     }
     
     /**

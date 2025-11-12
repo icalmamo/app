@@ -116,25 +116,37 @@ public class DoctorDashboardFragment extends Fragment {
     }
 
     private void setupStatsRecyclerView() {
-        // Get real statistics from database
-        int activePatients = getActivePatientsCount();
-        int todaysCases = databaseHelper.getTodaysCasesCount();
-        int pendingDiagnoses = databaseHelper.getPendingReviewsCount();
-        int prescriptionsWritten = getPrescriptionsCount();
-        
-        // Create doctor-specific stats data with real values (removed Follow-ups Due and Emergency Cases)
-        String[] statsLabels = {"Active Patients", "Total Patients", "Pending Diagnoses", "Prescriptions Written"};
-        String[] statsValues = {
-            String.valueOf(activePatients),
-            String.valueOf(todaysCases),
-            String.valueOf(pendingDiagnoses),
-            String.valueOf(prescriptionsWritten)
-        };
-        int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.accent_blue};
+        // Load stats in background to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            // Get real statistics from database
+            int activePatients = getActivePatientsCount();
+            int todaysCases = databaseHelper.getTodaysCasesCount();
+            int pendingDiagnoses = databaseHelper.getPendingReviewsCount();
+            int prescriptionsWritten = getPrescriptionsCount();
+            
+            // Create doctor-specific stats data with real values (removed Follow-ups Due and Emergency Cases)
+            final String[] statsLabels = {"Active Patients", "Total Patients", "Pending Diagnoses", "Prescriptions Written"};
+            final String[] statsValues = {
+                String.valueOf(activePatients),
+                String.valueOf(todaysCases),
+                String.valueOf(pendingDiagnoses),
+                String.valueOf(prescriptionsWritten)
+            };
+            final int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.accent_blue};
 
-        StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
-        statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
-        statsRecyclerView.setAdapter(adapter);
+            // Update UI on main thread
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                if (getContext() == null || getView() == null) {
+                    return; // Fragment is detached
+                }
+                
+                StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
+                statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
+                statsRecyclerView.setAdapter(adapter);
+                // Performance optimizations
+                statsRecyclerView.setHasFixedSize(true); // RecyclerView size doesn't change
+            });
+        });
     }
     
     /**
@@ -145,11 +157,10 @@ public class DoctorDashboardFragment extends Fragment {
     }
     
     /**
-     * Get total prescriptions count
+     * Get total prescriptions count (optimized - uses count query instead of loading all)
      */
     private int getPrescriptionsCount() {
-        List<com.example.h_cas.models.Prescription> prescriptions = databaseHelper.getAllPrescriptions();
-        return prescriptions != null ? prescriptions.size() : 0;
+        return databaseHelper.getPrescriptionsCount();
     }
 
     // Simple RecyclerView adapter for stats cards

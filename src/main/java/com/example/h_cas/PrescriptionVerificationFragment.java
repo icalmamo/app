@@ -115,38 +115,51 @@ public class PrescriptionVerificationFragment extends Fragment {
     }
 
     private void loadPendingPrescriptions() {
-        try {
-            if (databaseHelper == null || pendingPrescriptions == null) {
-                return;
-            }
-            
-            pendingPrescriptions.clear();
-            
-            // Get all prescriptions from database
-            List<Prescription> allPrescriptions = databaseHelper.getAllPrescriptions();
-            
-            if (allPrescriptions != null) {
+        if (databaseHelper == null || pendingPrescriptions == null) {
+            return;
+        }
+        
+        // Load prescriptions in background to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            try {
+                List<Prescription> allPrescriptions = databaseHelper.getAllPrescriptions();
+                
                 // Filter for pending prescriptions (not yet dispensed)
-                for (Prescription prescription : allPrescriptions) {
-                    if (prescription != null) {
-                        String status = prescription.getStatus();
-                        if ("Pending".equals(status) || status == null || status.isEmpty()) {
-                            pendingPrescriptions.add(prescription);
+                List<Prescription> pendingList = new ArrayList<>();
+                if (allPrescriptions != null) {
+                    for (Prescription prescription : allPrescriptions) {
+                        if (prescription != null) {
+                            String status = prescription.getStatus();
+                            if ("Pending".equals(status) || status == null || status.isEmpty()) {
+                                pendingList.add(prescription);
+                            }
                         }
                     }
                 }
+                
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (getContext() == null || getView() == null) {
+                        return; // Fragment is detached
+                    }
+                    
+                    pendingPrescriptions.clear();
+                    pendingPrescriptions.addAll(pendingList);
+                    
+                    if (prescriptionAdapter != null) {
+                        prescriptionAdapter.notifyDataSetChanged();
+                    }
+                    updateEmptyState();
+                });
+            } catch (Exception e) {
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (getContext() != null) {
+                        Toast.makeText(getContext(), "Error loading prescriptions: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
+                e.printStackTrace();
             }
-            
-            if (prescriptionAdapter != null) {
-                prescriptionAdapter.notifyDataSetChanged();
-            }
-            updateEmptyState();
-        } catch (Exception e) {
-            if (getContext() != null) {
-                Toast.makeText(getContext(), "Error loading prescriptions: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-            e.printStackTrace();
-        }
+        });
     }
 
     private void updateEmptyState() {

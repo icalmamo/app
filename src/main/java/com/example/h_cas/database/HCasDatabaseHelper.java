@@ -438,46 +438,84 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_ACTIVE, employee.isActive() ? 1 : 0);
         
         long result = db.insert(TABLE_EMPLOYEES, null, values);
-        db.close();
+        // Don't close database - reuse connection
+        
+        // Invalidate cache when employee is added
+        if (result != -1) {
+            invalidateEmployeeCache();
+        }
         
         return result != -1;
     }
 
+    // Cache for frequently accessed data
+    private List<Employee> cachedEmployees;
+    private long employeesCacheTime = 0;
+    private static final long CACHE_DURATION = 30000; // 30 seconds
+
     /**
      * Get all employees (excluding administrators)
+     * Uses caching to avoid repeated database queries
      */
     public List<Employee> getAllEmployees() {
+        // Return cached data if still valid
+        if (cachedEmployees != null && (System.currentTimeMillis() - employeesCacheTime) < CACHE_DURATION) {
+            return new ArrayList<>(cachedEmployees);
+        }
+
         List<Employee> employees = new ArrayList<>();
-        String query = "SELECT * FROM " + TABLE_EMPLOYEES + " WHERE " + COLUMN_IS_ACTIVE + " = 1 AND " + COLUMN_ROLE + " != 'Administrator'";
+        // Only select needed columns for better performance
+        String query = "SELECT " + COLUMN_EMPLOYEE_ID + ", " + COLUMN_FIRST_NAME + ", " + COLUMN_LAST_NAME + ", " +
+                      COLUMN_EMAIL + ", " + COLUMN_PHONE + ", " + COLUMN_ROLE + ", " + COLUMN_USERNAME + ", " +
+                      COLUMN_IS_ACTIVE + ", " + COLUMN_PROFILE_PICTURE_URL + 
+                      " FROM " + TABLE_EMPLOYEES + 
+                      " WHERE " + COLUMN_IS_ACTIVE + " = 1 AND " + COLUMN_ROLE + " != 'Administrator'";
         
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        if (cursor.moveToFirst()) {
-            do {
-                Employee employee = new Employee();
-                employee.setEmployeeId(cursor.getString(0));
-                employee.setFirstName(cursor.getString(1));
-                employee.setLastName(cursor.getString(2));
-                employee.setEmail(cursor.getString(3));
-                employee.setPhone(cursor.getString(4));
-                employee.setRole(cursor.getString(5));
-                employee.setUsername(cursor.getString(6));
-                employee.setPassword(cursor.getString(7));
-                employee.setCreatedDate(cursor.getString(8));
-                employee.setActive(cursor.getInt(9) == 1);
-                // Handle profile picture URL (index 10, may be null for existing records)
-                if (cursor.getColumnCount() > 10 && !cursor.isNull(10)) {
-                    employee.setProfilePictureUrl(cursor.getString(10));
-                }
-                
-                employees.add(employee);
-            } while (cursor.moveToNext());
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            if (cursor.moveToFirst()) {
+                do {
+                    Employee employee = new Employee();
+                    employee.setEmployeeId(cursor.getString(0));
+                    employee.setFirstName(cursor.getString(1));
+                    employee.setLastName(cursor.getString(2));
+                    employee.setEmail(cursor.getString(3));
+                    employee.setPhone(cursor.getString(4));
+                    employee.setRole(cursor.getString(5));
+                    employee.setUsername(cursor.getString(6));
+                    // Don't load password for security and performance
+                    employee.setActive(cursor.getInt(7) == 1);
+                    // Handle profile picture URL
+                    if (cursor.getColumnCount() > 8 && !cursor.isNull(8)) {
+                        employee.setProfilePictureUrl(cursor.getString(8));
+                    }
+                    
+                    employees.add(employee);
+                } while (cursor.moveToNext());
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
+
+        // Update cache
+        cachedEmployees = new ArrayList<>(employees);
+        employeesCacheTime = System.currentTimeMillis();
         
-        cursor.close();
-        db.close();
         return employees;
+    }
+    
+    /**
+     * Invalidate employee cache (call this when employees are added/updated/deleted)
+     */
+    public void invalidateEmployeeCache() {
+        cachedEmployees = null;
+        employeesCacheTime = 0;
     }
 
     /**
@@ -513,8 +551,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return employees;
     }
 
@@ -560,8 +600,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             System.out.println("DEBUG: No employee found with these credentials");
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return employee;
     }
 
@@ -648,80 +690,164 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Get total count of employees (excluding administrators)
+     * Get total count of employees (excluding administrators) - optimized
      */
     public int getTotalEmployeesCount() {
         String query = "SELECT COUNT(*) FROM " + TABLE_EMPLOYEES + " WHERE " + COLUMN_IS_ACTIVE + " = 1 AND " + COLUMN_ROLE + " != 'Administrator'";
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return count;
     }
 
     /**
-     * Get count of employees by role (excluding administrators)
+     * Get count of employees by role (excluding administrators) - optimized
      */
     public int getEmployeesCountByRole(String role) {
         String query = "SELECT COUNT(*) FROM " + TABLE_EMPLOYEES + 
                       " WHERE " + COLUMN_ROLE + " = ? AND " + COLUMN_IS_ACTIVE + " = 1 AND " + COLUMN_ROLE + " != 'Administrator'";
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{role});
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{role});
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return count;
     }
 
     /**
-     * Get today's cases count - returns total number of patients (total cases)
+     * Get today's cases count - returns total number of patients (total cases) - optimized
      */
     public int getTodaysCasesCount() {
-        String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS;
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
-        }
-        
-        cursor.close();
-        db.close();
-        return count;
+        // Use optimized count query instead of loading all patients
+        return getTotalPatientsCount();
     }
 
     /**
      * Get pending reviews count - returns count of patients who don't have prescriptions yet
+     * Optimized query using LEFT JOIN for better performance
      */
     public int getPendingReviewsCount() {
-        // Get patients who don't have any prescriptions
-        // Count patients where patient_id doesn't exist in prescriptions table
-        String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS + " WHERE " + COLUMN_PATIENT_ID + 
-                      " NOT IN (SELECT DISTINCT patient_id FROM " + TABLE_PRESCRIPTIONS + " WHERE patient_id IS NOT NULL)";
+        // Optimized query using LEFT JOIN instead of NOT IN (much faster)
+        String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS + " p " +
+                      "LEFT JOIN " + TABLE_PRESCRIPTIONS + " pr ON p." + COLUMN_PATIENT_ID + " = pr." + COLUMN_PATIENT_ID +
+                      " WHERE pr." + COLUMN_PATIENT_ID + " IS NULL";
         
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
+        }
+    }
+    
+    /**
+     * Get patients without prescriptions (optimized single query)
+     */
+    public List<com.example.h_cas.models.Patient> getPatientsWithoutPrescriptions() {
+        List<com.example.h_cas.models.Patient> patients = new ArrayList<>();
         
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        // Optimized query: Get patients who don't have prescriptions in a single query
+        String query = "SELECT p.* FROM " + TABLE_PATIENTS + " p " +
+                      "LEFT JOIN " + TABLE_PRESCRIPTIONS + " pr ON p." + COLUMN_PATIENT_ID + " = pr." + COLUMN_PATIENT_ID +
+                      " WHERE pr." + COLUMN_PATIENT_ID + " IS NULL";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            if (cursor.moveToFirst()) {
+                do {
+                    com.example.h_cas.models.Patient patient = new com.example.h_cas.models.Patient();
+                    patient.setPatientId(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_ID)));
+                    patient.setFirstName(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_FIRST_NAME)));
+                    patient.setLastName(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_LAST_NAME)));
+                    patient.setDateOfBirth(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_DOB)));
+                    patient.setGender(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_GENDER)));
+                    patient.setAddress(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_ADDRESS)));
+                    patient.setPhone(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_PHONE)));
+                    patient.setEmail(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_EMAIL)));
+                    patient.setEmergencyContactName(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_EMERGENCY_NAME)));
+                    patient.setEmergencyContactPhone(cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_PATIENT_EMERGENCY_PHONE)));
+                    
+                    // Extended fields
+                    if (cursor.getColumnCount() > 10) {
+                        int suffixIdx = cursor.getColumnIndex(COLUMN_PATIENT_SUFFIX);
+                        int fullNameIdx = cursor.getColumnIndex(COLUMN_PATIENT_FULL_NAME);
+                        int birthPlaceIdx = cursor.getColumnIndex(COLUMN_PATIENT_BIRTH_PLACE);
+                        int ageIdx = cursor.getColumnIndex(COLUMN_PATIENT_AGE);
+                        int fullAddressIdx = cursor.getColumnIndex(COLUMN_PATIENT_FULL_ADDRESS);
+                        int phoneNumberIdx = cursor.getColumnIndex(COLUMN_PATIENT_PHONE_NUMBER);
+                        int allergiesIdx = cursor.getColumnIndex(COLUMN_PATIENT_ALLERGIES);
+                        int medicationsIdx = cursor.getColumnIndex(COLUMN_PATIENT_MEDICATIONS);
+                        int medicalHistoryIdx = cursor.getColumnIndex(COLUMN_PATIENT_MEDICAL_HISTORY);
+                        int pulseRateIdx = cursor.getColumnIndex(COLUMN_PATIENT_PULSE_RATE);
+                        int bloodPressureIdx = cursor.getColumnIndex(COLUMN_PATIENT_BLOOD_PRESSURE);
+                        int temperatureIdx = cursor.getColumnIndex(COLUMN_PATIENT_TEMPERATURE);
+                        int bloodSugarIdx = cursor.getColumnIndex(COLUMN_PATIENT_BLOOD_SUGAR);
+                        int painScaleIdx = cursor.getColumnIndex(COLUMN_PATIENT_PAIN_SCALE);
+                        int symptomsIdx = cursor.getColumnIndex(COLUMN_PATIENT_SYMPTOMS_DESCRIPTION);
+                        
+                        if (suffixIdx >= 0) patient.setSuffix(cursor.getString(suffixIdx));
+                        if (fullNameIdx >= 0) patient.setFullName(cursor.getString(fullNameIdx));
+                        if (birthPlaceIdx >= 0) patient.setBirthPlace(cursor.getString(birthPlaceIdx));
+                        if (ageIdx >= 0) patient.setAge(cursor.getString(ageIdx));
+                        if (fullAddressIdx >= 0) patient.setFullAddress(cursor.getString(fullAddressIdx));
+                        if (phoneNumberIdx >= 0) patient.setPhoneNumber(cursor.getString(phoneNumberIdx));
+                        if (allergiesIdx >= 0) patient.setAllergies(cursor.getString(allergiesIdx));
+                        if (medicationsIdx >= 0) patient.setMedications(cursor.getString(medicationsIdx));
+                        if (medicalHistoryIdx >= 0) patient.setMedicalHistory(cursor.getString(medicalHistoryIdx));
+                        if (pulseRateIdx >= 0) patient.setPulseRate(cursor.getString(pulseRateIdx));
+                        if (bloodPressureIdx >= 0) patient.setBloodPressure(cursor.getString(bloodPressureIdx));
+                        if (temperatureIdx >= 0) patient.setTemperature(cursor.getString(temperatureIdx));
+                        if (bloodSugarIdx >= 0) patient.setBloodSugar(cursor.getString(bloodSugarIdx));
+                        if (painScaleIdx >= 0) patient.setPainScale(cursor.getString(painScaleIdx));
+                        if (symptomsIdx >= 0) patient.setSymptomsDescription(cursor.getString(symptomsIdx));
+                    }
+                    
+                    patients.add(patient);
+                } while (cursor.moveToNext());
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
         
-        cursor.close();
-        db.close();
-        return count;
+        return patients;
     }
 
     /**
@@ -733,7 +859,12 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_ACTIVE, 0);
         
         int result = db.update(TABLE_EMPLOYEES, values, COLUMN_EMPLOYEE_ID + " = ?", new String[]{employeeId});
-        db.close();
+        // Don't close database - reuse connection
+        
+        // Invalidate cache when employee is deleted/updated
+        if (result > 0) {
+            invalidateEmployeeCache();
+        }
         
         return result > 0;
     }
@@ -766,8 +897,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             }
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return employee;
     }
 
@@ -780,7 +913,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_PASSWORD, newPassword);
         
         int result = db.update(TABLE_EMPLOYEES, values, COLUMN_USERNAME + " = ?", new String[]{username});
-        db.close();
+        // Don't close database - reuse connection
         
         return result > 0;
     }
@@ -805,7 +938,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         
         int result = db.update(TABLE_EMPLOYEES, values, COLUMN_EMPLOYEE_ID + " = ?", 
                              new String[]{employee.getEmployeeId()});
-        db.close();
+        // Don't close database - reuse connection
         
         return result > 0;
     }
@@ -838,8 +971,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             }
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return employee;
     }
     
@@ -853,7 +988,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         
         int result = db.update(TABLE_EMPLOYEES, values, COLUMN_EMPLOYEE_ID + " = ?", 
                              new String[]{employeeId});
-        db.close();
+        // Don't close database - reuse connection
         
         return result > 0;
     }
@@ -898,11 +1033,14 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_PATIENT_BIRTH_PLACE, patient.getBirthPlace());
 
         long result = db.insert(TABLE_PATIENTS, null, values);
-        db.close();
+        // Don't close database - reuse connection
         
-        // Sync to Firebase if successful
+        // Sync to Firebase in background thread to avoid blocking
         if (result != -1) {
-            syncToFirebase("patient", patient);
+            final com.example.h_cas.models.Patient patientToSync = patient;
+            new Thread(() -> {
+                syncToFirebase("patient", patientToSync);
+            }).start();
         }
         
         return result != -1;
@@ -958,27 +1096,34 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
 
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return patients;
     }
     
     /**
-     * Get total count of patients
+     * Get total count of patients (optimized)
      */
     public int getTotalPatientsCount() {
         String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS;
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return count;
     }
 
     /**
@@ -1002,11 +1147,14 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_STATUS, prescription.getStatus());
         
         long result = db.insert(TABLE_PRESCRIPTIONS, null, values);
-        db.close();
+        // Don't close database - reuse connection
         
-        // Sync to Firebase if successful
+        // Sync to Firebase in background thread to avoid blocking
         if (result != -1) {
-            syncToFirebase("prescription", prescription);
+            final com.example.h_cas.models.Prescription prescriptionToSync = prescription;
+            new Thread(() -> {
+                syncToFirebase("prescription", prescriptionToSync);
+            }).start();
         }
         
         return result != -1;
@@ -1019,28 +1167,33 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         String query = "SELECT * FROM " + TABLE_PRESCRIPTIONS + " WHERE " + COLUMN_PRESCRIPTION_ID + " = ?";
         
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{prescriptionId});
-        
-        com.example.h_cas.models.Prescription prescription = null;
-        if (cursor.moveToFirst()) {
-            prescription = new com.example.h_cas.models.Prescription();
-            prescription.setPrescriptionId(cursor.getString(0));
-            prescription.setPatientId(cursor.getString(1));
-            prescription.setPatientName(cursor.getString(2));
-            prescription.setMedication(cursor.getString(3));
-            prescription.setDosage(cursor.getString(4));
-            prescription.setFrequency(cursor.getString(5));
-            prescription.setDuration(cursor.getString(6));
-            prescription.setInstructions(cursor.getString(7));
-            prescription.setDoctorId(cursor.getString(8));
-            prescription.setDoctorName(cursor.getString(9));
-            prescription.setCreatedDate(cursor.getString(10));
-            prescription.setStatus(cursor.getString(11));
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{prescriptionId});
+            
+            com.example.h_cas.models.Prescription prescription = null;
+            if (cursor.moveToFirst()) {
+                prescription = new com.example.h_cas.models.Prescription();
+                prescription.setPrescriptionId(cursor.getString(0));
+                prescription.setPatientId(cursor.getString(1));
+                prescription.setPatientName(cursor.getString(2));
+                prescription.setMedication(cursor.getString(3));
+                prescription.setDosage(cursor.getString(4));
+                prescription.setFrequency(cursor.getString(5));
+                prescription.setDuration(cursor.getString(6));
+                prescription.setInstructions(cursor.getString(7));
+                prescription.setDoctorId(cursor.getString(8));
+                prescription.setDoctorName(cursor.getString(9));
+                prescription.setCreatedDate(cursor.getString(10));
+                prescription.setStatus(cursor.getString(11));
+            }
+            return prescription;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return prescription;
     }
     
     /**
@@ -1064,11 +1217,14 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         
         int result = db.update(TABLE_PRESCRIPTIONS, values, COLUMN_PRESCRIPTION_ID + " = ?",
                               new String[]{prescription.getPrescriptionId()});
-        db.close();
+        // Don't close database - reuse connection
         
-        // Sync to Firebase if successful
+        // Sync to Firebase in background thread to avoid blocking
         if (result > 0) {
-            syncToFirebase("prescription", prescription);
+            final com.example.h_cas.models.Prescription prescriptionToSync = prescription;
+            new Thread(() -> {
+                syncToFirebase("prescription", prescriptionToSync);
+            }).start();
         }
         
         return result > 0;
@@ -1104,8 +1260,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return prescriptions;
     }
 
@@ -1116,64 +1274,74 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         String query = "SELECT * FROM " + TABLE_PATIENTS + " WHERE " + COLUMN_PATIENT_ID + " = ?";
         
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{patientId});
-        
-        com.example.h_cas.models.Patient patient = null;
-        if (cursor.moveToFirst()) {
-            patient = new com.example.h_cas.models.Patient();
-            patient.setPatientId(cursor.getString(0));
-            patient.setFirstName(cursor.getString(1));
-            patient.setLastName(cursor.getString(2));
-            patient.setDateOfBirth(cursor.getString(3));
-            patient.setGender(cursor.getString(4));
-            patient.setAddress(cursor.getString(5));
-            patient.setPhone(cursor.getString(6));
-            patient.setEmail(cursor.getString(7));
-            patient.setEmergencyContactName(cursor.getString(8));
-            patient.setEmergencyContactPhone(cursor.getString(9));
-            // Skip created date as Patient model doesn't have setCreatedDate method
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{patientId});
             
-            // Extended fields
-            if (cursor.getColumnCount() > 10) {
-                patient.setSuffix(cursor.getString(11));
-                patient.setFullName(cursor.getString(12));
-                patient.setBirthPlace(cursor.getString(13));
-                patient.setAge(cursor.getString(14));
-                patient.setFullAddress(cursor.getString(15));
-                patient.setPhoneNumber(cursor.getString(16));
-                patient.setAllergies(cursor.getString(17));
-                patient.setMedications(cursor.getString(18));
-                patient.setMedicalHistory(cursor.getString(19));
-                patient.setPulseRate(cursor.getString(20));
-                patient.setBloodPressure(cursor.getString(21));
-                patient.setTemperature(cursor.getString(22));
-                patient.setBloodSugar(cursor.getString(23));
-                patient.setPainScale(cursor.getString(24));
-                patient.setSymptomsDescription(cursor.getString(25));
+            com.example.h_cas.models.Patient patient = null;
+            if (cursor.moveToFirst()) {
+                patient = new com.example.h_cas.models.Patient();
+                patient.setPatientId(cursor.getString(0));
+                patient.setFirstName(cursor.getString(1));
+                patient.setLastName(cursor.getString(2));
+                patient.setDateOfBirth(cursor.getString(3));
+                patient.setGender(cursor.getString(4));
+                patient.setAddress(cursor.getString(5));
+                patient.setPhone(cursor.getString(6));
+                patient.setEmail(cursor.getString(7));
+                patient.setEmergencyContactName(cursor.getString(8));
+                patient.setEmergencyContactPhone(cursor.getString(9));
+                // Skip created date as Patient model doesn't have setCreatedDate method
+                
+                // Extended fields
+                if (cursor.getColumnCount() > 10) {
+                    patient.setSuffix(cursor.getString(11));
+                    patient.setFullName(cursor.getString(12));
+                    patient.setBirthPlace(cursor.getString(13));
+                    patient.setAge(cursor.getString(14));
+                    patient.setFullAddress(cursor.getString(15));
+                    patient.setPhoneNumber(cursor.getString(16));
+                    patient.setAllergies(cursor.getString(17));
+                    patient.setMedications(cursor.getString(18));
+                    patient.setMedicalHistory(cursor.getString(19));
+                    patient.setPulseRate(cursor.getString(20));
+                    patient.setBloodPressure(cursor.getString(21));
+                    patient.setTemperature(cursor.getString(22));
+                    patient.setBloodSugar(cursor.getString(23));
+                    patient.setPainScale(cursor.getString(24));
+                    patient.setSymptomsDescription(cursor.getString(25));
+                }
             }
+            return patient;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return patient;
     }
 
     /**
-     * Get prescriptions count
+     * Get prescriptions count (optimized)
      */
     public int getPrescriptionsCount() {
         String query = "SELECT COUNT(*) FROM " + TABLE_PRESCRIPTIONS;
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return count;
     }
 
     // Medicine Management Methods
@@ -1196,7 +1364,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SUPPLIER, medicine.getSupplier());
         
         long result = db.insert(TABLE_MEDICINES, null, values);
-        db.close();
+        // Don't close database - reuse connection
         
         return result != -1;
     }
@@ -1239,7 +1407,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_STOCK_QUANTITY, newStock);
         
         int result = db.update(TABLE_MEDICINES, values, COLUMN_MEDICINE_NAME + " = ?", new String[]{medicineName});
-        db.close();
+        // Don't close database - reuse connection
         
         return result > 0;
     }
@@ -1266,7 +1434,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_IS_DISPENSED, 0); // Not dispensed yet
         
         long result = db.insert(TABLE_RFID_DATA, null, values);
-        db.close();
+        // Don't close database - reuse connection
         
         return result != -1;
     }
@@ -1315,7 +1483,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_PHARMACIST_NAME, pharmacistName);
         
         int result = db.update(TABLE_RFID_DATA, values, COLUMN_RFID_TAG_ID + " = ?", new String[]{rfidTagId});
-        db.close();
+        // Don't close database - reuse connection
         
         return result > 0;
     }
@@ -1426,7 +1594,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_SUPPLIER, medicine.getSupplier());
         
         long result = db.insert(TABLE_MEDICINES, null, values);
-        db.close();
+        // Don't close database - reuse connection
         
         return result != -1;
     }
@@ -1459,8 +1627,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return medicines;
     }
 
@@ -1493,8 +1663,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return medicines;
     }
 
@@ -1528,8 +1700,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             } while (cursor.moveToNext());
         }
         
-        cursor.close();
-        db.close();
+        if (cursor != null) {
+            cursor.close();
+        }
+        // Don't close database - reuse connection
         return medicines;
     }
 
@@ -1555,11 +1729,14 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         
         int result = db.update(TABLE_MEDICINES, values, COLUMN_MEDICINE_ID + " = ?",
                               new String[]{medicine.getMedicineId()});
-        db.close();
+        // Don't close database - reuse connection
         
-        // Sync to Firebase if successful
+        // Sync to Firebase in background thread to avoid blocking
         if (result > 0) {
-            syncToFirebase("medicine", medicine);
+            final com.example.h_cas.models.Medicine medicineToSync = medicine;
+            new Thread(() -> {
+                syncToFirebase("medicine", medicineToSync);
+            }).start();
         }
         
         return result > 0;
@@ -1571,7 +1748,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     public boolean deleteMedicine(String medicineId) {
         SQLiteDatabase db = this.getWritableDatabase();
         int result = db.delete(TABLE_MEDICINES, COLUMN_MEDICINE_ID + " = ?", new String[]{medicineId});
-        db.close();
+        // Don't close database - reuse connection
         
         return result > 0;
     }
@@ -1624,39 +1801,64 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     }
 
     /**
-     * Get count of low stock medicines
+     * Get count of low stock medicines (optimized - uses database query instead of loading all)
+     */
+    public int getLowStockMedicinesCount(int minimumStock) {
+        String query = "SELECT COUNT(*) FROM " + TABLE_MEDICINES + 
+                      " WHERE " + COLUMN_STOCK_QUANTITY + " <= ?";
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{String.valueOf(minimumStock)});
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
+        }
+    }
+    
+    /**
+     * Get count of low stock medicines (default threshold of 10)
      */
     public int getLowStockMedicinesCount() {
-        String query = "SELECT COUNT(*) FROM " + TABLE_MEDICINES + " WHERE " + COLUMN_STOCK_QUANTITY + " <= 10";
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
-        }
-        
-        cursor.close();
-        db.close();
-        return count;
+        return getLowStockMedicinesCount(10);
     }
-
+    
     /**
-     * Get count of expiring soon medicines
+     * Get count of expiring medicines (optimized - uses database query)
      */
-    public int getExpiringSoonMedicinesCount() {
-        String query = "SELECT COUNT(*) FROM " + TABLE_MEDICINES + " WHERE " + COLUMN_EXPIRY_DATE + " LIKE '%2024%'";
+    public int getExpiringSoonMedicinesCount(int thresholdMonths) {
+        // Calculate expiry date threshold
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.add(java.util.Calendar.MONTH, thresholdMonths);
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault());
+        String thresholdDate = sdf.format(cal.getTime());
+        
+        String query = "SELECT COUNT(*) FROM " + TABLE_MEDICINES + 
+                      " WHERE " + COLUMN_EXPIRY_DATE + " <= ? AND " + COLUMN_EXPIRY_DATE + " IS NOT NULL";
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        int count = 0;
-        if (cursor.moveToFirst()) {
-            count = cursor.getInt(0);
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{thresholdDate});
+            
+            int count = 0;
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            return count;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        cursor.close();
-        db.close();
-        return count;
     }
 }
 

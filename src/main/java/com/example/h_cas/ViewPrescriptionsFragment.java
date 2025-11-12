@@ -23,6 +23,7 @@ import com.example.h_cas.models.Prescription;
 import com.example.h_cas.models.Patient;
 import com.example.h_cas.utils.RFIDHelper;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -66,10 +67,27 @@ public class ViewPrescriptionsFragment extends Fragment {
         prescriptionAdapter = new PrescriptionAdapter();
         prescriptionsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         prescriptionsRecyclerView.setAdapter(prescriptionAdapter);
+        // Performance optimizations
+        prescriptionsRecyclerView.setHasFixedSize(true); // RecyclerView size doesn't change
+        prescriptionsRecyclerView.setItemViewCacheSize(20); // Cache more views for smoother scrolling
     }
 
     private void loadPrescriptions() {
-        List<Prescription> prescriptions = databaseHelper.getAllPrescriptions();
+        // Load prescriptions in background to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            List<Prescription> prescriptions = databaseHelper.getAllPrescriptions();
+            
+            // Update UI on main thread
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                if (getContext() == null || getView() == null) {
+                    return; // Fragment is detached
+                }
+                loadPrescriptionsIntoUI(prescriptions);
+            });
+        });
+    }
+    
+    private void loadPrescriptionsIntoUI(List<Prescription> prescriptions) {
         
         if (prescriptions.isEmpty()) {
             emptyStateTextView.setVisibility(View.VISIBLE);
@@ -89,11 +107,58 @@ public class ViewPrescriptionsFragment extends Fragment {
 
     // RecyclerView Adapter for prescriptions
     private class PrescriptionAdapter extends RecyclerView.Adapter<PrescriptionAdapter.PrescriptionViewHolder> {
-        private List<Prescription> prescriptions;
+        private List<Prescription> prescriptions = new ArrayList<>();
 
-        public void setPrescriptions(List<Prescription> prescriptions) {
-            this.prescriptions = prescriptions;
-            notifyDataSetChanged();
+        public void setPrescriptions(List<Prescription> newPrescriptions) {
+            if (newPrescriptions == null) {
+                newPrescriptions = new ArrayList<>();
+            }
+            
+            if (this.prescriptions == null) {
+                this.prescriptions = new ArrayList<>();
+            }
+            
+            // Use DiffUtil for efficient updates (only updates changed items)
+            androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(new PrescriptionDiffCallback(this.prescriptions, newPrescriptions));
+            
+            this.prescriptions.clear();
+            this.prescriptions.addAll(newPrescriptions);
+            diffResult.dispatchUpdatesTo(this);
+        }
+        
+        // DiffUtil callback for efficient RecyclerView updates
+        private class PrescriptionDiffCallback extends androidx.recyclerview.widget.DiffUtil.Callback {
+            private List<Prescription> oldList;
+            private List<Prescription> newList;
+            
+            public PrescriptionDiffCallback(List<Prescription> oldList, List<Prescription> newList) {
+                this.oldList = oldList;
+                this.newList = newList;
+            }
+            
+            @Override
+            public int getOldListSize() {
+                return oldList.size();
+            }
+            
+            @Override
+            public int getNewListSize() {
+                return newList.size();
+            }
+            
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldList.get(oldItemPosition).getPrescriptionId().equals(newList.get(newItemPosition).getPrescriptionId());
+            }
+            
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                Prescription oldPrescription = oldList.get(oldItemPosition);
+                Prescription newPrescription = newList.get(newItemPosition);
+                return oldPrescription.getMedication().equals(newPrescription.getMedication()) &&
+                       oldPrescription.getStatus().equals(newPrescription.getStatus());
+            }
         }
 
         @NonNull

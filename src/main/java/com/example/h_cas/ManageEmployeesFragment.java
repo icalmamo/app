@@ -21,6 +21,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -65,6 +66,9 @@ public class ManageEmployeesFragment extends Fragment {
         employeeAdapter = new EmployeeAdapter();
         employeesRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         employeesRecyclerView.setAdapter(employeeAdapter);
+        // Performance optimizations
+        employeesRecyclerView.setHasFixedSize(true); // RecyclerView size doesn't change
+        employeesRecyclerView.setItemViewCacheSize(20); // Cache more views for smoother scrolling
     }
 
     private void setupClickListeners() {
@@ -72,16 +76,30 @@ public class ManageEmployeesFragment extends Fragment {
     }
 
     private void loadEmployees() {
-        List<Employee> employees = databaseHelper.getAllEmployees();
+        // Show loading state
+        emptyStateTextView.setVisibility(View.GONE);
+        employeesRecyclerView.setVisibility(View.GONE);
         
-        if (employees.isEmpty()) {
-            emptyStateTextView.setVisibility(View.VISIBLE);
-            employeesRecyclerView.setVisibility(View.GONE);
-        } else {
-            emptyStateTextView.setVisibility(View.GONE);
-            employeesRecyclerView.setVisibility(View.VISIBLE);
-            employeeAdapter.setEmployees(employees);
-        }
+        // Load employees in background thread to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            List<Employee> employees = databaseHelper.getAllEmployees();
+            
+            // Update UI on main thread
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                if (getContext() == null || getView() == null) {
+                    return; // Fragment is detached
+                }
+                
+                if (employees.isEmpty()) {
+                    emptyStateTextView.setVisibility(View.VISIBLE);
+                    employeesRecyclerView.setVisibility(View.GONE);
+                } else {
+                    emptyStateTextView.setVisibility(View.GONE);
+                    employeesRecyclerView.setVisibility(View.VISIBLE);
+                    employeeAdapter.setEmployees(employees);
+                }
+            });
+        });
     }
 
     private void showAddEmployeeDialog() {
@@ -160,11 +178,56 @@ public class ManageEmployeesFragment extends Fragment {
 
     // RecyclerView Adapter for employees
     private class EmployeeAdapter extends RecyclerView.Adapter<EmployeeAdapter.EmployeeViewHolder> {
-        private List<Employee> employees;
+        private List<Employee> employees = new ArrayList<>();
 
-        public void setEmployees(List<Employee> employees) {
-            this.employees = employees;
-            notifyDataSetChanged();
+        public void setEmployees(List<Employee> newEmployees) {
+            if (newEmployees == null) {
+                newEmployees = new ArrayList<>();
+            }
+            
+            // Use DiffUtil for efficient updates (only updates changed items)
+            androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(new EmployeeDiffCallback(this.employees, newEmployees));
+            
+            this.employees.clear();
+            this.employees.addAll(newEmployees);
+            diffResult.dispatchUpdatesTo(this);
+        }
+        
+        // DiffUtil callback for efficient RecyclerView updates
+        private class EmployeeDiffCallback extends androidx.recyclerview.widget.DiffUtil.Callback {
+            private List<Employee> oldList;
+            private List<Employee> newList;
+            
+            public EmployeeDiffCallback(List<Employee> oldList, List<Employee> newList) {
+                this.oldList = oldList;
+                this.newList = newList;
+            }
+            
+            @Override
+            public int getOldListSize() {
+                return oldList.size();
+            }
+            
+            @Override
+            public int getNewListSize() {
+                return newList.size();
+            }
+            
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldList.get(oldItemPosition).getEmployeeId().equals(newList.get(newItemPosition).getEmployeeId());
+            }
+            
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                Employee oldEmployee = oldList.get(oldItemPosition);
+                Employee newEmployee = newList.get(newItemPosition);
+                return oldEmployee.getFirstName().equals(newEmployee.getFirstName()) &&
+                       oldEmployee.getLastName().equals(newEmployee.getLastName()) &&
+                       oldEmployee.getRole().equals(newEmployee.getRole()) &&
+                       oldEmployee.isActive() == newEmployee.isActive();
+            }
         }
 
         @NonNull

@@ -68,24 +68,33 @@ public class PatientHistoryFragment extends Fragment {
     }
 
     private void loadPatientHistory() {
-        // Get all patients who have received prescriptions
-        List<PatientHistoryItem> patientHistoryItems = getPatientsWithPrescriptions();
-        
-        if (patientHistoryItems.isEmpty()) {
-            emptyStateTextView.setVisibility(View.VISIBLE);
-            patientHistoryRecyclerView.setVisibility(View.GONE);
-        } else {
-            emptyStateTextView.setVisibility(View.GONE);
-            patientHistoryRecyclerView.setVisibility(View.VISIBLE);
-            patientHistoryAdapter.setPatientHistoryItems(patientHistoryItems);
-        }
+        // Load patient history in background to avoid blocking UI
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            List<Prescription> prescriptions = databaseHelper.getAllPrescriptions();
+            List<PatientHistoryItem> historyItems = processPrescriptionsToHistoryItems(prescriptions);
+            
+            // Update UI on main thread
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                if (getContext() == null || getView() == null) {
+                    return; // Fragment is detached
+                }
+                
+                if (historyItems.isEmpty()) {
+                    emptyStateTextView.setVisibility(View.VISIBLE);
+                    patientHistoryRecyclerView.setVisibility(View.GONE);
+                } else {
+                    emptyStateTextView.setVisibility(View.GONE);
+                    patientHistoryRecyclerView.setVisibility(View.VISIBLE);
+                    if (patientHistoryAdapter != null) {
+                        patientHistoryAdapter.setPatientHistoryItems(historyItems);
+                    }
+                }
+            });
+        });
     }
-
-    private List<PatientHistoryItem> getPatientsWithPrescriptions() {
+    
+    private List<PatientHistoryItem> processPrescriptionsToHistoryItems(List<Prescription> prescriptions) {
         List<PatientHistoryItem> historyItems = new ArrayList<>();
-        
-        // Get all prescriptions
-        List<Prescription> prescriptions = databaseHelper.getAllPrescriptions();
         
         // Create a map to track unique patients and their prescription counts
         Map<String, PatientHistoryItem> patientMap = new HashMap<>();
