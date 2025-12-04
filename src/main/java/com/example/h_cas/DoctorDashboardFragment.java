@@ -1,5 +1,6 @@
 package com.example.h_cas;
 
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -9,14 +10,21 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.card.MaterialCardView;
+import com.github.mikephil.charting.charts.BarChart;
+import com.github.mikephil.charting.components.AxisBase;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.BarData;
+import com.github.mikephil.charting.data.BarDataSet;
+import com.github.mikephil.charting.data.BarEntry;
+import com.github.mikephil.charting.formatter.ValueFormatter;
 import com.google.android.material.button.MaterialButton;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,10 +33,10 @@ import java.util.List;
  */
 public class DoctorDashboardFragment extends Fragment {
 
-    private RecyclerView statsRecyclerView;
+    private BarChart medicalOverviewChart;
     private TextView welcomeTextView;
     private HCasDatabaseHelper databaseHelper;
-    private MaterialButton quickActionViewPatients;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
     private MaterialButton quickActionNewDiagnosis;
     private MaterialButton quickActionWritePrescription;
 
@@ -39,7 +47,7 @@ public class DoctorDashboardFragment extends Fragment {
         
         initializeDatabase();
         initializeViews(view);
-        setupStatsRecyclerView();
+        setupLineChart();
         setupQuickActionButtons(view);
         
         return view;
@@ -48,20 +56,23 @@ public class DoctorDashboardFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // Refresh stats when returning to this fragment
-        if (databaseHelper != null) {
-            setupStatsRecyclerView();
+        // Refresh chart when returning to this fragment
+        android.util.Log.d("DoctorDashboard", "📊 Fragment resumed, refreshing chart...");
+        if (medicalOverviewChart != null) {
+            setupLineChart();
+        } else {
+            android.util.Log.w("DoctorDashboard", "⚠️ Chart is null, cannot refresh");
         }
     }
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
 
     private void initializeViews(View view) {
-        statsRecyclerView = view.findViewById(R.id.statsRecyclerView);
+        medicalOverviewChart = view.findViewById(R.id.medicalOverviewChart);
         welcomeTextView = view.findViewById(R.id.welcomeTextView);
-        quickActionViewPatients = view.findViewById(R.id.quickActionViewPatients);
         quickActionNewDiagnosis = view.findViewById(R.id.quickActionNewDiagnosis);
         quickActionWritePrescription = view.findViewById(R.id.quickActionWritePrescription);
         
@@ -83,17 +94,6 @@ public class DoctorDashboardFragment extends Fragment {
      * Setup quick action buttons with click listeners
      */
     private void setupQuickActionButtons(View view) {
-        // View Patients - Navigate to Registered Patients
-        quickActionViewPatients.setOnClickListener(v -> {
-            if (getActivity() instanceof DoctorDashboardActivity) {
-                DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
-                activity.loadFragment(new RegisteredPatientsFragment());
-                activity.getSupportActionBar().setTitle("Registered Patients");
-                // Update navigation drawer selection
-                activity.updateNavigationSelection(R.id.nav_registered_patients);
-            }
-        });
-        
         // New Diagnosis - Navigate to Create Diagnosis
         quickActionNewDiagnosis.setOnClickListener(v -> {
             if (getActivity() instanceof DoctorDashboardActivity) {
@@ -115,38 +115,370 @@ public class DoctorDashboardFragment extends Fragment {
         });
     }
 
-    private void setupStatsRecyclerView() {
-        // Load stats in background to avoid blocking UI
-        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-            // Get real statistics from database
-            int activePatients = getActivePatientsCount();
-            int todaysCases = databaseHelper.getTodaysCasesCount();
-            int pendingDiagnoses = databaseHelper.getPendingReviewsCount();
-            int prescriptionsWritten = getPrescriptionsCount();
-            
-            // Create doctor-specific stats data with real values (removed Follow-ups Due and Emergency Cases)
-            final String[] statsLabels = {"Active Patients", "Total Patients", "Pending Diagnoses", "Prescriptions Written"};
-            final String[] statsValues = {
-                String.valueOf(activePatients),
-                String.valueOf(todaysCases),
-                String.valueOf(pendingDiagnoses),
-                String.valueOf(prescriptionsWritten)
-            };
-            final int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.accent_blue};
+    private void setupLineChart() {
+        if (medicalOverviewChart == null || getContext() == null) {
+            return;
+        }
 
-            // Update UI on main thread
-            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                if (getContext() == null || getView() == null) {
-                    return; // Fragment is detached
+        android.util.Log.d("DoctorDashboard", "📊 Starting chart setup...");
+        
+        // Fetch patients from Firebase RTDB (primary source) with SQLite fallback
+        if (firebaseRTDBHelper != null) {
+            android.util.Log.d("DoctorDashboard", "📊 Firebase RTDB helper available, fetching patients...");
+            firebaseRTDBHelper.getAllPatients(patients -> {
+                android.util.Log.d("DoctorDashboard", "📊 Firebase callback received: " + (patients != null ? patients.size() : 0) + " patients");
+                
+                // Log sample patient data if available
+                if (patients != null && !patients.isEmpty()) {
+                    com.example.h_cas.models.Patient sample = patients.get(0);
+                    android.util.Log.d("DoctorDashboard", "📊 Sample patient: ID=" + sample.getPatientId() + ", CreatedDate=" + sample.getCreatedDate());
                 }
                 
-                StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
-                statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
-                statsRecyclerView.setAdapter(adapter);
-                // Performance optimizations
-                statsRecyclerView.setHasFixedSize(true); // RecyclerView size doesn't change
+                // If Firebase returns empty or null, fallback to SQLite
+                if (patients == null || patients.isEmpty()) {
+                    android.util.Log.w("DoctorDashboard", "⚠️ Firebase returned empty, falling back to SQLite");
+                    com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                        List<com.example.h_cas.models.Patient> sqlitePatients = databaseHelper != null ? 
+                            databaseHelper.getAllPatients() : new java.util.ArrayList<>();
+                        android.util.Log.d("DoctorDashboard", "📊 SQLite patients loaded: " + sqlitePatients.size());
+                        
+                        // Log sample SQLite patient data
+                        if (!sqlitePatients.isEmpty()) {
+                            com.example.h_cas.models.Patient sample = sqlitePatients.get(0);
+                            android.util.Log.d("DoctorDashboard", "📊 Sample SQLite patient: ID=" + sample.getPatientId() + ", CreatedDate=" + sample.getCreatedDate());
+                        }
+                        
+                        processPatientData(sqlitePatients);
+                    });
+                } else {
+                    // Process Firebase data
+                    android.util.Log.d("DoctorDashboard", "📊 Processing Firebase data...");
+                    com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                        processPatientData(patients);
+                    });
+                }
             });
+        } else {
+            // Fallback to SQLite if Firebase not available
+            android.util.Log.w("DoctorDashboard", "⚠️ Firebase not available, using SQLite");
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                List<com.example.h_cas.models.Patient> patients = databaseHelper != null ? 
+                    databaseHelper.getAllPatients() : new java.util.ArrayList<>();
+                android.util.Log.d("DoctorDashboard", "📊 SQLite patients loaded: " + patients.size());
+                
+                // Log sample SQLite patient data
+                if (!patients.isEmpty()) {
+                    com.example.h_cas.models.Patient sample = patients.get(0);
+                    android.util.Log.d("DoctorDashboard", "📊 Sample SQLite patient: ID=" + sample.getPatientId() + ", CreatedDate=" + sample.getCreatedDate());
+                }
+                
+                processPatientData(patients);
+            });
+        }
+    }
+    
+    /**
+     * Process patient data and update bar chart
+     */
+    private void processPatientData(List<com.example.h_cas.models.Patient> patients) {
+        // Get patient registrations grouped by date
+        final java.util.Map<String, Integer> patientCountByDate = getPatientRegistrationsByDate(patients);
+        android.util.Log.d("DoctorDashboard", "📊 Patient count by date: " + patientCountByDate);
+        
+        // Generate last 7 days (including today)
+        final java.util.List<String> last7Days = generateLast7Days();
+        android.util.Log.d("DoctorDashboard", "📊 Last 7 days: " + last7Days);
+        
+        // Create bar entries with accurate counts for each day
+        final ArrayList<BarEntry> barEntries = new ArrayList<>();
+        final ArrayList<String> dateLabels = new ArrayList<>();
+        
+        for (int i = 0; i < last7Days.size(); i++) {
+            String date = last7Days.get(i);
+            // Get accurate count from database based on actual registration dates (0 if no patients registered that day)
+            int count = patientCountByDate.getOrDefault(date, 0);
+            barEntries.add(new BarEntry(i, count));
+            dateLabels.add(formatDateForDisplay(date));
+            android.util.Log.d("DoctorDashboard", "📊 Bar entry " + i + ": Date=" + date + ", Count=" + count + " patients, Display=" + formatDateForDisplay(date));
+        }
+        
+        // Log all dates with patient counts for debugging
+        android.util.Log.d("DoctorDashboard", "📊 All patient counts by date: " + patientCountByDate);
+        
+        // Log summary
+        int totalPatientsInPeriod = 0;
+        for (int count : patientCountByDate.values()) {
+            totalPatientsInPeriod += count;
+        }
+        android.util.Log.d("DoctorDashboard", "📊 Total patients in last 7 days: " + totalPatientsInPeriod);
+        android.util.Log.d("DoctorDashboard", "📊 Total patients processed: " + (patients != null ? patients.size() : 0));
+
+        // Update UI on main thread
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+            if (getContext() == null || getView() == null || medicalOverviewChart == null) {
+                return; // Fragment is detached
+            }
+
+            // Configure bar chart
+            medicalOverviewChart.getDescription().setEnabled(false);
+            medicalOverviewChart.setTouchEnabled(true);
+            medicalOverviewChart.setDragEnabled(true);
+            medicalOverviewChart.setScaleEnabled(true);
+            medicalOverviewChart.setPinchZoom(true);
+            medicalOverviewChart.setDrawGridBackground(false);
+            medicalOverviewChart.setBackgroundColor(Color.WHITE);
+            medicalOverviewChart.setDrawBarShadow(false);
+            medicalOverviewChart.setDrawValueAboveBar(true);
+
+            // X-Axis configuration (Dates - Horizontal)
+            XAxis xAxis = medicalOverviewChart.getXAxis();
+            xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+            xAxis.setDrawGridLines(false);
+            xAxis.setGranularity(1f);
+            xAxis.setTextColor(Color.parseColor("#757575"));
+            xAxis.setTextSize(10f);
+            xAxis.setLabelRotationAngle(-45f);
+            xAxis.setValueFormatter(new ValueFormatter() {
+                @Override
+                public String getAxisLabel(float value, AxisBase axis) {
+                    int index = (int) value;
+                    if (index >= 0 && index < dateLabels.size()) {
+                        return dateLabels.get(index);
+                    }
+                    return "";
+                }
+            });
+
+            // Y-Axis configuration (Total Number of Patients - Vertical)
+            YAxis leftAxis = medicalOverviewChart.getAxisLeft();
+            leftAxis.setDrawGridLines(true);
+            leftAxis.setGridColor(Color.parseColor("#E0E0E0"));
+            leftAxis.setTextColor(Color.parseColor("#757575"));
+            leftAxis.setTextSize(11f);
+            leftAxis.setAxisMinimum(0f);
+            leftAxis.setGranularity(1f);
+            
+            // Calculate max value for better Y-axis scaling
+            float maxValue = 0f;
+            for (BarEntry entry : barEntries) {
+                if (entry.getY() > maxValue) {
+                    maxValue = entry.getY();
+                }
+            }
+            // Set max to at least 5, or max value + 2 for better visibility
+            float axisMaximum = Math.max(5f, maxValue + 2f);
+            leftAxis.setAxisMaximum(axisMaximum);
+            leftAxis.setLabelCount(Math.min(8, (int)axisMaximum + 1), true);
+            
+            android.util.Log.d("DoctorDashboard", "📊 Y-Axis: Min=0, Max=" + axisMaximum + ", Max patient count=" + maxValue);
+
+            YAxis rightAxis = medicalOverviewChart.getAxisRight();
+            rightAxis.setEnabled(false);
+
+            // Create bar dataset
+            BarDataSet barDataSet = new BarDataSet(barEntries, "Total Patients Registered");
+            barDataSet.setColor(getContext().getColor(R.color.doctor_navy));
+            barDataSet.setValueTextSize(10f);
+            barDataSet.setValueTextColor(Color.parseColor("#757575"));
+            barDataSet.setDrawValues(true);
+
+            // Create BarData and add dataset
+            BarData barData = new BarData(barDataSet);
+            barData.setBarWidth(0.6f);
+            
+            // Log final data before setting
+            android.util.Log.d("DoctorDashboard", "📊 Setting chart data with " + barEntries.size() + " entries");
+            for (int i = 0; i < barEntries.size(); i++) {
+                android.util.Log.d("DoctorDashboard", "📊 Entry " + i + ": X=" + barEntries.get(i).getX() + ", Y=" + barEntries.get(i).getY());
+            }
+            
+            medicalOverviewChart.setData(barData);
+            medicalOverviewChart.animateY(1000);
+            medicalOverviewChart.invalidate();
+            
+            android.util.Log.d("DoctorDashboard", "✅ Chart data set and invalidated");
         });
+    }
+    
+    /**
+     * Generate list of last 7 days (including today)
+     * Returns dates in YYYY-MM-DD format, with today as the last entry
+     */
+    private java.util.List<String> generateLast7Days() {
+        java.util.List<String> dates = new java.util.ArrayList<>();
+        java.text.SimpleDateFormat dateFormat = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault());
+        java.util.Calendar calendar = java.util.Calendar.getInstance();
+        
+        // Start from 6 days ago and go up to today (7 days total)
+        for (int i = 6; i >= 0; i--) {
+            calendar.setTimeInMillis(System.currentTimeMillis());
+            calendar.add(java.util.Calendar.DAY_OF_MONTH, -i);
+            String date = dateFormat.format(calendar.getTime());
+            dates.add(date);
+        }
+        
+        return dates;
+    }
+    
+    /**
+     * Get patient registrations grouped by date
+     * Returns a map of date (YYYY-MM-DD) to accurate patient count
+     * Only includes dates that have patient registrations
+     * @param patients List of patients from Firebase (if null, uses SQLite fallback)
+     */
+    private java.util.Map<String, Integer> getPatientRegistrationsByDate(List<com.example.h_cas.models.Patient> patients) {
+        java.util.Map<String, Integer> dateCountMap = new java.util.HashMap<>();
+        
+        try {
+            // Use provided patients list (from Firebase) or fetch from SQLite
+            List<com.example.h_cas.models.Patient> allPatients = patients;
+            if (allPatients == null && databaseHelper != null) {
+                allPatients = databaseHelper.getAllPatients();
+            }
+            
+            if (allPatients != null && !allPatients.isEmpty()) {
+                android.util.Log.d("DoctorDashboard", "📊 Processing " + allPatients.size() + " patients");
+                int processedCount = 0;
+                int skippedCount = 0;
+                
+                for (com.example.h_cas.models.Patient patient : allPatients) {
+                    String createdDate = patient.getCreatedDate();
+                    android.util.Log.d("DoctorDashboard", "📊 Processing patient " + patient.getPatientId() + ", createdDate=" + createdDate);
+                    
+                    // Only process patients with valid created_date
+                    if (createdDate != null && !createdDate.isEmpty()) {
+                        // Extract date part (YYYY-MM-DD) from datetime string
+                        String dateOnly = extractDateOnly(createdDate);
+                        android.util.Log.d("DoctorDashboard", "📊 Extracted date: " + dateOnly + " from: " + createdDate);
+                        
+                        if (dateOnly != null && !dateOnly.isEmpty()) {
+                            // Count patients registered on this specific date
+                            int currentCount = dateCountMap.getOrDefault(dateOnly, 0);
+                            dateCountMap.put(dateOnly, currentCount + 1);
+                            processedCount++;
+                            android.util.Log.d("DoctorDashboard", "✅ Patient " + patient.getPatientId() + " registered on " + dateOnly + " (count for this date: " + dateCountMap.get(dateOnly) + ")");
+                        } else {
+                            skippedCount++;
+                            android.util.Log.w("DoctorDashboard", "⚠️ Could not extract date from: " + createdDate + " for patient " + patient.getPatientId());
+                        }
+                    } else {
+                        skippedCount++;
+                        android.util.Log.w("DoctorDashboard", "⚠️ Patient " + patient.getPatientId() + " has no created_date - skipping (will not appear in graph)");
+                    }
+                }
+                android.util.Log.d("DoctorDashboard", "📊 Processed: " + processedCount + ", Skipped: " + skippedCount + ", Total dates with patients: " + dateCountMap.size());
+            } else {
+                android.util.Log.w("DoctorDashboard", "⚠️ allPatients is null or empty");
+            }
+            
+        } catch (Exception e) {
+            android.util.Log.e("DoctorDashboard", "Error getting patient registrations by date", e);
+        }
+        
+        return dateCountMap;
+    }
+    
+    /**
+     * Extract date only (YYYY-MM-DD) from datetime string
+     * Handles multiple date formats and ensures accurate extraction
+     */
+    private String extractDateOnly(String dateTimeString) {
+        if (dateTimeString == null || dateTimeString.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Trim whitespace
+            dateTimeString = dateTimeString.trim();
+            
+            // Handle different date formats
+            // Format 1: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD HH:MM:SS.SSS" (most common)
+            if (dateTimeString.contains(" ")) {
+                // Has time component, extract date part (first part before space)
+                String datePart = dateTimeString.split(" ")[0];
+                // Validate YYYY-MM-DD format
+                if (datePart.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                    android.util.Log.d("DoctorDashboard", "📊 Extracted date from datetime: " + datePart);
+                    return datePart;
+                }
+            }
+            
+            // Format 2: "YYYY-MM-DD" (already correct format)
+            if (dateTimeString.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                android.util.Log.d("DoctorDashboard", "📊 Date already in correct format: " + dateTimeString);
+                return dateTimeString;
+            }
+            
+            // Format 2b: SQLite datetime format "YYYY-MM-DD HH:MM:SS" (handle T separator too)
+            if (dateTimeString.contains("T")) {
+                String datePart = dateTimeString.split("T")[0];
+                if (datePart.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                    android.util.Log.d("DoctorDashboard", "📊 Extracted date from ISO format: " + datePart);
+                    return datePart;
+                }
+            }
+            
+            // Format 3: "MM/DD/YYYY" or "M/D/YYYY"
+            if (dateTimeString.contains("/")) {
+                String[] parts = dateTimeString.split("/");
+                if (parts.length == 3) {
+                    try {
+                        int month = Integer.parseInt(parts[0].trim());
+                        int day = Integer.parseInt(parts[1].trim());
+                        int year = Integer.parseInt(parts[2].trim());
+                        // Convert to YYYY-MM-DD format
+                        return String.format("%04d-%02d-%02d", year, month, day);
+                    } catch (NumberFormatException e) {
+                        android.util.Log.w("DoctorDashboard", "⚠️ Invalid date format: " + dateTimeString);
+                    }
+                }
+            }
+            
+            // Format 4: Timestamp (long value)
+            try {
+                long timestamp = Long.parseLong(dateTimeString);
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault());
+                return sdf.format(new java.util.Date(timestamp));
+            } catch (NumberFormatException e) {
+                // Not a timestamp, continue
+            }
+            
+            android.util.Log.w("DoctorDashboard", "⚠️ Unrecognized date format: " + dateTimeString);
+            return null;
+            
+        } catch (Exception e) {
+            android.util.Log.e("DoctorDashboard", "Error extracting date from: " + dateTimeString, e);
+            return null;
+        }
+    }
+    
+    /**
+     * Format date for display (e.g., "Nov 17" or "12/17")
+     */
+    private String formatDateForDisplay(String dateString) {
+        if (dateString == null || dateString.isEmpty()) {
+            return "";
+        }
+        
+        try {
+            // Parse YYYY-MM-DD format
+            String[] parts = dateString.split("-");
+            if (parts.length == 3) {
+                int month = Integer.parseInt(parts[1]);
+                int day = Integer.parseInt(parts[2]);
+                
+                String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+                
+                if (month >= 1 && month <= 12) {
+                    return monthNames[month - 1] + " " + day;
+                }
+            }
+        } catch (Exception e) {
+            // If parsing fails, return original string
+        }
+        
+        return dateString;
     }
     
     /**
@@ -163,50 +495,6 @@ public class DoctorDashboardFragment extends Fragment {
         return databaseHelper.getPrescriptionsCount();
     }
 
-    // Simple RecyclerView adapter for stats cards
-    private class StatsAdapter extends RecyclerView.Adapter<StatsAdapter.StatsViewHolder> {
-        private String[] labels;
-        private String[] values;
-        private int[] colors;
-
-        public StatsAdapter(String[] labels, String[] values, int[] colors) {
-            this.labels = labels;
-            this.values = values;
-            this.colors = colors;
-        }
-
-        @NonNull
-        @Override
-        public StatsViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_stat_card, parent, false);
-            return new StatsViewHolder(view);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull StatsViewHolder holder, int position) {
-            holder.labelText.setText(labels[position]);
-            holder.valueText.setText(values[position]);
-            holder.cardView.setCardBackgroundColor(getContext().getColor(colors[position]));
-        }
-
-        @Override
-        public int getItemCount() {
-            return labels.length;
-        }
-
-        class StatsViewHolder extends RecyclerView.ViewHolder {
-            MaterialCardView cardView;
-            TextView labelText;
-            TextView valueText;
-
-            public StatsViewHolder(@NonNull View itemView) {
-                super(itemView);
-                cardView = itemView.findViewById(R.id.statCardView);
-                labelText = itemView.findViewById(R.id.statLabelText);
-                valueText = itemView.findViewById(R.id.statValueText);
-            }
-        }
-    }
 }
 
 

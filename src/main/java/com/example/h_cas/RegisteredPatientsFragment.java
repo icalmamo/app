@@ -19,6 +19,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Patient;
 import com.example.h_cas.models.Prescription;
 
@@ -34,6 +35,7 @@ public class RegisteredPatientsFragment extends Fragment {
     private RecyclerView patientsRecyclerView;
     private TextView emptyStateTextView;
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
     private PatientAdapter patientAdapter;
 
     @Nullable
@@ -59,6 +61,7 @@ public class RegisteredPatientsFragment extends Fragment {
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
 
     private void setupRecyclerView() {
@@ -75,27 +78,99 @@ public class RegisteredPatientsFragment extends Fragment {
         emptyStateTextView.setVisibility(View.GONE);
         patientsRecyclerView.setVisibility(View.GONE);
         
-        // Load patients in background thread to avoid blocking UI
-        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-            // Use optimized single query instead of loading all data then filtering
-            List<Patient> patientsWithoutPrescriptions = databaseHelper.getPatientsWithoutPrescriptions();
-            
-            // Update UI on main thread
-            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                if (getContext() == null || getView() == null) {
-                    return; // Fragment is detached
+        android.util.Log.d("RegisteredPatients", "🔄 Loading patients...");
+        
+        // Load patients from Firebase RTDB (primary source)
+        if (firebaseRTDBHelper != null) {
+            android.util.Log.d("RegisteredPatients", "📊 Fetching from Firebase RTDB...");
+            firebaseRTDBHelper.getAllPatients(patients -> {
+                android.util.Log.d("RegisteredPatients", "📊 Firebase callback received: " + (patients != null ? patients.size() : 0) + " patients");
+                
+                // Process on background thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                    // Filter out null patients and ensure valid data
+                    List<Patient> validPatients = new ArrayList<>();
+                    if (patients != null && !patients.isEmpty()) {
+                        for (Patient patient : patients) {
+                            if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
+                                validPatients.add(patient);
+                            }
+                        }
+                        android.util.Log.d("RegisteredPatients", "✅ Valid patients: " + validPatients.size() + " out of " + patients.size());
+                    } else {
+                        android.util.Log.w("RegisteredPatients", "⚠️ Firebase returned null or empty, falling back to SQLite");
+                        // Fallback to SQLite if Firebase returns empty
+                        if (databaseHelper != null) {
+                            List<Patient> sqlitePatients = databaseHelper.getAllPatients();
+                            if (sqlitePatients != null && !sqlitePatients.isEmpty()) {
+                                for (Patient patient : sqlitePatients) {
+                                    if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
+                                        validPatients.add(patient);
+                                    }
+                                }
+                                android.util.Log.d("RegisteredPatients", "📊 SQLite patients loaded: " + validPatients.size());
+                            }
+                        }
+                    }
+                    
+                    final List<Patient> finalPatients = validPatients;
+                    
+                    // Update UI on main thread
+                    com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                        if (getContext() == null || getView() == null) {
+                            android.util.Log.w("RegisteredPatients", "⚠️ Fragment detached, skipping UI update");
+                            return; // Fragment is detached
+                        }
+                        
+                        if (finalPatients.isEmpty()) {
+                            android.util.Log.d("RegisteredPatients", "📭 No patients found, showing empty state");
+                            emptyStateTextView.setVisibility(View.VISIBLE);
+                            patientsRecyclerView.setVisibility(View.GONE);
+                        } else {
+                            android.util.Log.d("RegisteredPatients", "✅ Displaying " + finalPatients.size() + " patients");
+                            emptyStateTextView.setVisibility(View.GONE);
+                            patientsRecyclerView.setVisibility(View.VISIBLE);
+                            patientAdapter.setPatients(finalPatients);
+                        }
+                    });
+                });
+            });
+        } else {
+            // Fallback to SQLite if Firebase not available
+            android.util.Log.w("RegisteredPatients", "⚠️ Firebase not available, using SQLite");
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                List<Patient> allPatients = new ArrayList<>();
+                if (databaseHelper != null) {
+                    List<Patient> sqlitePatients = databaseHelper.getAllPatients();
+                    if (sqlitePatients != null && !sqlitePatients.isEmpty()) {
+                        for (Patient patient : sqlitePatients) {
+                            if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
+                                allPatients.add(patient);
+                            }
+                        }
+                        android.util.Log.d("RegisteredPatients", "📊 SQLite patients loaded: " + allPatients.size());
+                    }
                 }
                 
-                if (patientsWithoutPrescriptions.isEmpty()) {
-                    emptyStateTextView.setVisibility(View.VISIBLE);
-                    patientsRecyclerView.setVisibility(View.GONE);
-                } else {
-                    emptyStateTextView.setVisibility(View.GONE);
-                    patientsRecyclerView.setVisibility(View.VISIBLE);
-                    patientAdapter.setPatients(patientsWithoutPrescriptions);
-                }
+                final List<Patient> finalPatients = allPatients;
+                
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (getContext() == null || getView() == null) {
+                        return; // Fragment is detached
+                    }
+                    
+                    if (finalPatients.isEmpty()) {
+                        emptyStateTextView.setVisibility(View.VISIBLE);
+                        patientsRecyclerView.setVisibility(View.GONE);
+                    } else {
+                        emptyStateTextView.setVisibility(View.GONE);
+                        patientsRecyclerView.setVisibility(View.VISIBLE);
+                        patientAdapter.setPatients(finalPatients);
+                    }
+                });
             });
-        });
+        }
     }
 
     @Override

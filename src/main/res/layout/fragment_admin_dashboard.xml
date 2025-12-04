@@ -3,28 +3,32 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background_light"
-    android:fillViewport="true">
+    android:background="#F5F7FA"
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
-        <!-- Welcome Section -->
+        <!-- Welcome Section - Purple Theme -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp">
+            android:layout_marginBottom="24dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp"
+            app:cardBackgroundColor="@color/admin_deep_purple">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp"
+                android:padding="24dp"
+                android:background="@drawable/admin_welcome_background"
                 android:gravity="center_horizontal">
 
                 <!-- Logo -->
@@ -41,91 +45,165 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Welcome to H-CAS Admin Dashboard"
-                    android:textSize="20sp"
+                    android:textSize="24sp"
                     android:textStyle="bold"
-                    android:textColor="@color/text_primary" />
+                    android:textColor="#1A1A1A"
+                    android:letterSpacing="0.02" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="Manage your healthcare system efficiently"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary" />
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A"
+                    android:alpha="0.8" />
 
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
 
         <!-- Quick Stats Section -->
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:text="System Overview"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="System Overview"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:letterSpacing="0.01" />
+
+        </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/statsRecyclerView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="28dp"
+            android:nestedScrollingEnabled="false" />
 
         <!-- Quick Actions Section -->
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:text="Quick Actions"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Quick Actions"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:letterSpacing="0.01" />
+
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/createEmployeeButton"
+            <!-- Create Employee Button -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="8dp"
-                android:text="Create New Employee"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_add_user"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/primary_blue"
-                android:textColor="@color/white" />
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/white">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/viewEmployeesButton"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="8dp"
-                android:text="View All Employees"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_manage_users"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/success_green"
-                android:textColor="@color/white" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/createEmployeeButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:text="Create New Employee"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#1A1A1A"
+                    android:letterSpacing="0.01"
+                    app:icon="@drawable/ic_add_user"
+                    app:iconGravity="textStart"
+                    app:iconTint="#1A1A1A"
+                    app:cornerRadius="14dp"
+                    app:backgroundTint="@color/admin_deep_purple"
+                    app:elevation="0dp"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/generateReportsButton"
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- View Employees Button -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/white">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/viewEmployeesButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:text="View All Employees"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/white"
+                    android:letterSpacing="0.01"
+                    app:icon="@drawable/ic_manage_users"
+                    app:iconGravity="textStart"
+                    app:iconTint="@color/white"
+                    app:cornerRadius="14dp"
+                    app:backgroundTint="@color/admin_deep_purple"
+                    app:elevation="0dp"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp" />
+
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Generate Reports Button -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="Generate Reports"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_reports"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/warning_orange"
-                android:textColor="@color/white" />
+                app:cardCornerRadius="14dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="@color/white">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/generateReportsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="64dp"
+                    android:text="Generate Reports"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/white"
+                    android:letterSpacing="0.01"
+                    app:icon="@drawable/ic_reports"
+                    app:iconGravity="textStart"
+                    app:iconTint="@color/white"
+                    app:cornerRadius="14dp"
+                    app:backgroundTint="@color/admin_deep_purple"
+                    app:elevation="0dp"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp" />
+
+            </com.google.android.material.card.MaterialCardView>
 
         </LinearLayout>
 

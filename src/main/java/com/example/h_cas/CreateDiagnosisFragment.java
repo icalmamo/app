@@ -14,6 +14,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Patient;
 
 /**
@@ -30,6 +31,7 @@ public class CreateDiagnosisFragment extends Fragment {
     private MaterialButton createDiagnosisButton;
     
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
 
     @Nullable
     @Override
@@ -68,6 +70,7 @@ public class CreateDiagnosisFragment extends Fragment {
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
 
     private void setupClickListeners() {
@@ -83,54 +86,80 @@ public class CreateDiagnosisFragment extends Fragment {
         String notes = getText(notesInput);
 
         if (validateInputs(patientId, diagnosis, symptoms, treatmentPlan)) {
-            // Get patient from database
-            com.example.h_cas.models.Patient patient = databaseHelper.getPatientById(patientId);
-            if (patient == null) {
-                showToast("❌ Patient not found. Please check Patient ID.");
-                return;
-            }
-            
-            // Update patient's medical history with diagnosis information
-            StringBuilder medicalHistory = new StringBuilder();
-            if (patient.getMedicalHistory() != null && !patient.getMedicalHistory().isEmpty()) {
-                medicalHistory.append(patient.getMedicalHistory()).append("\n\n");
-            }
-            
-            medicalHistory.append("=== DIAGNOSIS ===\n");
-            medicalHistory.append("Date: ").append(getCurrentDateTime()).append("\n");
-            medicalHistory.append("Diagnosis: ").append(diagnosis).append("\n");
-            medicalHistory.append("Symptoms: ").append(symptoms).append("\n");
-            medicalHistory.append("Treatment Plan: ").append(treatmentPlan).append("\n");
-            if (followUp != null && !followUp.isEmpty()) {
-                medicalHistory.append("Follow-up: ").append(followUp).append("\n");
-            }
-            if (notes != null && !notes.isEmpty()) {
-                medicalHistory.append("Notes: ").append(notes).append("\n");
-            }
-            
-            // Update patient's medical history in database
-            patient.setMedicalHistory(medicalHistory.toString());
-            
-            // Update symptoms description as well
-            if (patient.getSymptomsDescription() == null || patient.getSymptomsDescription().isEmpty()) {
-                patient.setSymptomsDescription(symptoms);
+            // Get patient from Firebase RTDB (primary source)
+            if (firebaseRTDBHelper != null) {
+                firebaseRTDBHelper.getPatientById(patientId, patient -> {
+                    if (patient == null) {
+                        // Fallback to SQLite if not found in Firebase
+                        if (databaseHelper != null) {
+                            patient = databaseHelper.getPatientById(patientId);
+                        }
+                    }
+                    
+                    if (patient == null) {
+                        showToast("❌ Patient not found. Please check Patient ID.");
+                        return;
+                    }
+                    
+                    // Process diagnosis with patient data
+                    processDiagnosis(patient, patientId, diagnosis, symptoms, treatmentPlan, followUp, notes);
+                });
             } else {
-                patient.setSymptomsDescription(patient.getSymptomsDescription() + "\n" + symptoms);
+                // Fallback to SQLite if Firebase not available
+                com.example.h_cas.models.Patient patient = databaseHelper != null ? 
+                    databaseHelper.getPatientById(patientId) : null;
+                if (patient == null) {
+                    showToast("❌ Patient not found. Please check Patient ID.");
+                    return;
+                }
+                processDiagnosis(patient, patientId, diagnosis, symptoms, treatmentPlan, followUp, notes);
             }
-            
-            // Save updated patient to database
-            boolean success = databaseHelper.updatePatient(patient);
-            
-            if (success) {
-                showToast("✅ Diagnosis recorded successfully!");
-                clearForm();
-            } else {
-                showToast("❌ Failed to save diagnosis. Please try again.");
-            }
-            
-            // Note: For better organization, consider creating a separate diagnoses table
-            // For now, diagnosis information is stored in patient's medical history
         }
+    }
+    
+    private void processDiagnosis(com.example.h_cas.models.Patient patient, String patientId, 
+                                   String diagnosis, String symptoms, String treatmentPlan, 
+                                   String followUp, String notes) {
+        // Update patient's medical history with diagnosis information
+        StringBuilder medicalHistory = new StringBuilder();
+        if (patient.getMedicalHistory() != null && !patient.getMedicalHistory().isEmpty()) {
+            medicalHistory.append(patient.getMedicalHistory()).append("\n\n");
+        }
+        
+        medicalHistory.append("=== DIAGNOSIS ===\n");
+        medicalHistory.append("Date: ").append(getCurrentDateTime()).append("\n");
+        medicalHistory.append("Diagnosis: ").append(diagnosis).append("\n");
+        medicalHistory.append("Symptoms: ").append(symptoms).append("\n");
+        medicalHistory.append("Treatment Plan: ").append(treatmentPlan).append("\n");
+        if (followUp != null && !followUp.isEmpty()) {
+            medicalHistory.append("Follow-up: ").append(followUp).append("\n");
+        }
+        if (notes != null && !notes.isEmpty()) {
+            medicalHistory.append("Notes: ").append(notes).append("\n");
+        }
+        
+        // Update patient's medical history in database
+        patient.setMedicalHistory(medicalHistory.toString());
+        
+        // Update symptoms description as well
+        if (patient.getSymptomsDescription() == null || patient.getSymptomsDescription().isEmpty()) {
+            patient.setSymptomsDescription(symptoms);
+        } else {
+            patient.setSymptomsDescription(patient.getSymptomsDescription() + "\n" + symptoms);
+        }
+        
+        // Save updated patient to database
+        boolean success = databaseHelper.updatePatient(patient);
+        
+        if (success) {
+            showToast("✅ Diagnosis recorded successfully!");
+            clearForm();
+        } else {
+            showToast("❌ Failed to save diagnosis. Please try again.");
+        }
+        
+        // Note: For better organization, consider creating a separate diagnoses table
+        // For now, diagnosis information is stored in patient's medical history
     }
     
     private String getCurrentDateTime() {

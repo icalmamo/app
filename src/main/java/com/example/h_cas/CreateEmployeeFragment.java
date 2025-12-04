@@ -16,6 +16,12 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
+import java.util.HashMap;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
@@ -89,7 +95,7 @@ public class CreateEmployeeFragment extends Fragment {
     }
 
     private void setupRoleSpinner() {
-        String[] roles = {"Select Role", "Nurse", "Doctor", "Pharmacist", "Lab Technician", "Receptionist"};
+        String[] roles = {"Select Role", "Nurse", "Doctor", "Pharmacist"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_dropdown_item_1line, roles);
         roleAutoCompleteTextView.setAdapter(adapter);
         roleAutoCompleteTextView.setText(roles[0], false);
@@ -97,8 +103,13 @@ public class CreateEmployeeFragment extends Fragment {
         roleAutoCompleteTextView.setOnItemClickListener((parent, view, position, id) -> {
             if (position == 0) {
                 roleLayout.setError("Please select a valid role");
+                employeeIdEditText.setText(""); // Clear employee ID if role is deselected
             } else {
                 roleLayout.setError(null);
+                // Auto-generate employee ID based on selected role
+                String selectedRole = roles[position];
+                String generatedId = databaseHelper.generateNextEmployeeId(selectedRole);
+                employeeIdEditText.setText(generatedId);
             }
         });
     }
@@ -113,32 +124,121 @@ public class CreateEmployeeFragment extends Fragment {
             createEmployeeButton.setEnabled(false);
             createEmployeeButton.setText("Creating Employee...");
             
-            // Create employee object
+            // Get input values
+            String email = emailEditText.getText().toString().trim();
+            String password = passwordEditText.getText().toString().trim();
+            String firstName = firstNameEditText.getText().toString().trim();
+            String lastName = lastNameEditText.getText().toString().trim();
+            String employeeId = employeeIdEditText.getText().toString().trim();
+            String phone = phoneEditText.getText().toString().trim();
+            String role = roleAutoCompleteTextView.getText().toString().trim();
+            String username = usernameEditText.getText().toString().trim();
+            
+            // Create employee object for SQLite
             Employee employee = new Employee();
-            employee.setEmployeeId(employeeIdEditText.getText().toString().trim());
-            employee.setFirstName(firstNameEditText.getText().toString().trim());
-            employee.setLastName(lastNameEditText.getText().toString().trim());
-            employee.setEmail(emailEditText.getText().toString().trim());
-            employee.setPhone(phoneEditText.getText().toString().trim());
-            employee.setRole(roleAutoCompleteTextView.getText().toString().trim());
-            employee.setUsername(usernameEditText.getText().toString().trim());
-            employee.setPassword(passwordEditText.getText().toString().trim());
+            employee.setEmployeeId(employeeId);
+            employee.setFirstName(firstName);
+            employee.setLastName(lastName);
+            employee.setEmail(email);
+            employee.setPhone(phone);
+            employee.setRole(role);
+            employee.setUsername(username);
+            employee.setPassword(password);
             
-            // Save to database
-            boolean success = databaseHelper.addEmployee(employee);
-            
-            createEmployeeButton.postDelayed(() -> {
-                if (success) {
-                    Toast.makeText(getContext(), "Employee created successfully!", Toast.LENGTH_SHORT).show();
-                    clearForm();
-                } else {
-                    Toast.makeText(getContext(), "Failed to create employee. Please try again.", Toast.LENGTH_LONG).show();
-                }
-                
-                // Reset button state
-                createEmployeeButton.setEnabled(true);
-                createEmployeeButton.setText("Create Employee");
-            }, 1000);
+            // Create Firebase Auth user
+            FirebaseAuth firebaseAuth = FirebaseAuth.getInstance();
+            firebaseAuth.createUserWithEmailAndPassword(email, password)
+                    .addOnCompleteListener(task -> {
+                        if (task.isSuccessful()) {
+                            FirebaseUser user = firebaseAuth.getCurrentUser();
+                            if (user != null) {
+                                String uid = user.getUid();
+                                
+                                // Save employee data to Firebase Realtime Database
+                                // Use lowercase "employees" to match FirebaseHelper path
+                                DatabaseReference ref = FirebaseDatabase.getInstance(
+                                        "https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                                        .getReference("employees");
+                                
+                                HashMap<String, Object> employeeData = new HashMap<>();
+                                employeeData.put("employee_id", employeeId);
+                                employeeData.put("first_name", firstName);
+                                employeeData.put("last_name", lastName);
+                                employeeData.put("full_name", firstName + " " + lastName);
+                                employeeData.put("email", email);
+                                employeeData.put("phone", phone);
+                                employeeData.put("role", role);
+                                employeeData.put("username", username);
+                                employeeData.put("password", password); // CRITICAL: Save password for forgot password feature
+                                employeeData.put("is_active", true);
+                                employeeData.put("created_at", System.currentTimeMillis());
+                                employeeData.put("created_by", "admin"); // Or get current admin user
+                                
+                                ref.child(uid).setValue(employeeData)
+                                        .addOnSuccessListener(aVoid -> {
+                                            android.util.Log.d("CreateEmployee", "✅ Employee saved to Firebase: " + uid);
+                                            
+                                            // Also save to SQLite database
+                                            boolean sqliteSuccess = databaseHelper.addEmployee(employee);
+                                            
+                                            if (sqliteSuccess) {
+                                                android.util.Log.d("CreateEmployee", "✅ Employee saved to SQLite: " + employee.getEmployeeId());
+                                                
+                                                // Invalidate cache to refresh employee list
+                                                databaseHelper.invalidateEmployeeCache();
+                                                
+                                                Toast.makeText(getContext(), "Employee created successfully!", Toast.LENGTH_SHORT).show();
+                                                clearForm();
+                                                
+                                                // Refresh employee list if ManageEmployeesFragment is active
+                                                // This will be handled by onResume when user navigates back
+                                            } else {
+                                                android.util.Log.e("CreateEmployee", "❌ Failed to save employee to SQLite");
+                                                Toast.makeText(getContext(), "Employee saved to Firebase but failed to save to local database. Please check logs.", Toast.LENGTH_LONG).show();
+                                            }
+                                            
+                                            // Reset button state
+                                            createEmployeeButton.setEnabled(true);
+                                            createEmployeeButton.setText("Create Employee");
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            android.util.Log.e("CreateEmployee", "❌ Failed to save employee to Firebase: " + e.getMessage());
+                                            e.printStackTrace();
+                                            
+                                            Toast.makeText(getContext(), "Failed to save employee to Firebase: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                                            
+                                            // Reset button state
+                                            createEmployeeButton.setEnabled(true);
+                                            createEmployeeButton.setText("Create Employee");
+                                        });
+                            }
+                        } else {
+                            // Firebase Auth creation failed
+                            Exception exception = task.getException();
+                            String errorMessage = "Failed to create employee account.";
+                            
+                            if (exception != null) {
+                                String exceptionMessage = exception.getMessage();
+                                if (exceptionMessage != null) {
+                                    if (exceptionMessage.contains("email-already-in-use")) {
+                                        errorMessage = "This email is already registered.";
+                                    } else if (exceptionMessage.contains("weak-password")) {
+                                        errorMessage = "Password is too weak. Please use a stronger password.";
+                                    } else if (exceptionMessage.contains("invalid-email")) {
+                                        errorMessage = "Invalid email address format.";
+                                    } else {
+                                        errorMessage = "Error: " + exceptionMessage;
+                                    }
+                                }
+                            }
+                            
+                            Toast.makeText(getContext(), errorMessage, Toast.LENGTH_LONG).show();
+                            
+                            // Reset button state
+                            createEmployeeButton.setEnabled(true);
+                            createEmployeeButton.setText("Create Employee");
+                        }
+                    });
         }
     }
 

@@ -41,6 +41,7 @@ public class Patient {
     
     // System Information
     private String createdDate;
+    private String nfcUid; // NFC UID for patient identification
 
     public String getPatientId() {
         return patientId;
@@ -249,6 +250,14 @@ public class Patient {
 
     public void setCreatedDate(String createdDate) {
         this.createdDate = createdDate;
+    }
+
+    public String getNfcUid() {
+        return nfcUid;
+    }
+
+    public void setNfcUid(String nfcUid) {
+        this.nfcUid = nfcUid;
     }
 }
 

@@ -101,7 +101,7 @@ public class PharmacistDashboardFragment extends Fragment {
             String.valueOf(pendingReviews),
             String.valueOf(totalMedicines)
         };
-        int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.error_red, R.color.accent_blue, R.color.text_secondary};
+        int[] statsColors = {R.color.pharmacist_green, R.color.pharmacist_green, R.color.pharmacist_green, R.color.pharmacist_green, R.color.pharmacist_green, R.color.pharmacist_green};
 
         StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
         statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));

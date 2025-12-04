@@ -26,10 +26,6 @@ public class NurseDashboardFragment extends Fragment {
     private RecyclerView statsRecyclerView;
     private TextView welcomeTextView;
     private TextView subtitleTextView;
-    private MaterialButton registrationButton;
-    private MaterialButton monitoringButton;
-    private MaterialButton profileButton;
-    private MaterialButton prescriptionsButton;
     
     private HCasDatabaseHelper databaseHelper;
 
@@ -37,12 +33,11 @@ public class NurseDashboardFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_nurse_dashboard, container, false);
-        
+
         initializeViews(view);
         initializeDatabase();
         setupStatsRecyclerView();
-        setupClickListeners();
-        
+
         return view;
     }
 
@@ -57,10 +52,6 @@ public class NurseDashboardFragment extends Fragment {
         statsRecyclerView = view.findViewById(R.id.statsRecyclerView);
         welcomeTextView = view.findViewById(R.id.welcomeTextView);
         subtitleTextView = view.findViewById(R.id.subtitleTextView);
-        registrationButton = view.findViewById(R.id.registrationButton);
-        monitoringButton = view.findViewById(R.id.monitoringButton);
-        profileButton = view.findViewById(R.id.profileButton);
-        prescriptionsButton = view.findViewById(R.id.prescriptionsButton);
         
         // Get employee data from arguments
         Bundle args = getArguments();
@@ -87,7 +78,7 @@ public class NurseDashboardFragment extends Fragment {
         int totalPatients = databaseHelper.getTotalPatientsCount();
         int monitoringCount = getMonitoringCount(); // Patients being monitored
         int prescriptionCount = getPrescriptionCount(); // Doctor prescriptions
-        
+
         // Create healthcare system stats data with real values (removed Registration as it's same as Total Patients)
         String[] statsLabels = {"Total Patients", "Monitoring", "Doctor's Prescription"};
         String[] statsValues = {
@@ -95,67 +86,26 @@ public class NurseDashboardFragment extends Fragment {
             String.valueOf(monitoringCount),
             String.valueOf(prescriptionCount)
         };
-        int[] statsColors = {R.color.primary_blue, R.color.warning_orange, R.color.accent_blue};
+        int[] statsColors = {R.color.nurse_teal, R.color.nurse_teal, R.color.nurse_teal};
 
-        StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
+        StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors, (position, label) -> {
+            if ("Doctor's Prescription".equals(label)) {
+                // Navigate to ViewPrescriptionsFragment
+                if (getActivity() instanceof NurseDashboardActivity) {
+                    NurseDashboardActivity activity = (NurseDashboardActivity) getActivity();
+                    activity.getSupportFragmentManager()
+                            .beginTransaction()
+                            .replace(R.id.fragmentContainer, new ViewPrescriptionsFragment())
+                            .addToBackStack(null)
+                            .commit();
+                    activity.getSupportActionBar().setTitle("Doctor's Prescriptions");
+                }
+            }
+        });
         statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
         statsRecyclerView.setAdapter(adapter);
     }
 
-    private void setupClickListeners() {
-        // Registration button click
-        registrationButton.setOnClickListener(v -> {
-            if (getActivity() instanceof NurseDashboardActivity) {
-                NurseDashboardActivity activity = (NurseDashboardActivity) getActivity();
-                activity.getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragmentContainer, new PatientRegistrationFragment())
-                        .commit();
-                activity.getSupportActionBar().setTitle("Registration");
-            }
-        });
-
-        // Monitoring button click
-        monitoringButton.setOnClickListener(v -> {
-            if (getActivity() instanceof NurseDashboardActivity) {
-                NurseDashboardActivity activity = (NurseDashboardActivity) getActivity();
-                activity.getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragmentContainer, new PatientMonitoringFragment())
-                        .commit();
-                activity.getSupportActionBar().setTitle("Monitoring");
-            }
-        });
-
-        // Profile button click
-        profileButton.setOnClickListener(v -> {
-            if (getActivity() instanceof NurseDashboardActivity) {
-                NurseDashboardActivity activity = (NurseDashboardActivity) getActivity();
-                Bundle args = getArguments();
-                NurseProfileFragment profileFragment = new NurseProfileFragment();
-                if (args != null) {
-                    profileFragment.setArguments(args);
-                }
-                activity.getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragmentContainer, profileFragment)
-                        .commit();
-                activity.getSupportActionBar().setTitle("Nurse Profile");
-            }
-        });
-
-        // Prescriptions button click
-        prescriptionsButton.setOnClickListener(v -> {
-            if (getActivity() instanceof NurseDashboardActivity) {
-                NurseDashboardActivity activity = (NurseDashboardActivity) getActivity();
-                activity.getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragmentContainer, new ViewPrescriptionsFragment())
-                        .commit();
-                activity.getSupportActionBar().setTitle("Doctor's Prescriptions");
-            }
-        });
-    }
 
     /**
      * Get count of patients being monitored
@@ -171,10 +121,13 @@ public class NurseDashboardFragment extends Fragment {
      * Get count of doctor prescriptions
      */
     private int getPrescriptionCount() {
-        // For now, return a calculated value based on total patients
-        // In a real system, this would query prescriptions table
-        int totalPatients = databaseHelper.getTotalPatientsCount();
-        return Math.max(1, totalPatients / 2); // Approximately 1/2 of patients have prescriptions
+        // Query actual prescription count from database
+        return databaseHelper.getPrescriptionsCount();
+    }
+
+    // Interface for item click listener
+    public interface OnItemClickListener {
+        void onItemClick(int position, String label);
     }
 
     // Simple RecyclerView adapter for stats cards
@@ -182,11 +135,13 @@ public class NurseDashboardFragment extends Fragment {
         private String[] labels;
         private String[] values;
         private int[] colors;
+        private OnItemClickListener listener;
 
-        public StatsAdapter(String[] labels, String[] values, int[] colors) {
+        public StatsAdapter(String[] labels, String[] values, int[] colors, OnItemClickListener listener) {
             this.labels = labels;
             this.values = values;
             this.colors = colors;
+            this.listener = listener;
         }
 
         @NonNull
@@ -201,6 +156,13 @@ public class NurseDashboardFragment extends Fragment {
             holder.labelText.setText(labels[position]);
             holder.valueText.setText(values[position]);
             holder.cardView.setCardBackgroundColor(getContext().getColor(colors[position]));
+
+            // Set click listener
+            holder.cardView.setOnClickListener(v -> {
+                if (listener != null) {
+                    listener.onItemClick(position, labels[position]);
+                }
+            });
         }
 
         @Override

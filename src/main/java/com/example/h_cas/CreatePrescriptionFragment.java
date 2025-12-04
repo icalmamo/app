@@ -14,8 +14,10 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Prescription;
 import com.example.h_cas.models.Employee;
+import com.example.h_cas.models.Patient;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -34,6 +36,7 @@ public class CreatePrescriptionFragment extends Fragment {
     private MaterialButton createPrescriptionButton;
     
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
     private String currentDoctorId;
     private String currentDoctorName;
 
@@ -76,6 +79,7 @@ public class CreatePrescriptionFragment extends Fragment {
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
 
     private void getCurrentDoctorInfo() {
@@ -105,33 +109,33 @@ public class CreatePrescriptionFragment extends Fragment {
         String instructions = getText(instructionsInput);
 
         if (validateInputs(patientId, medication, frequency, duration)) {
-            // Get patient name from database
-            String patientName = getPatientName(patientId);
-            
-            // Create prescription object
-            Prescription prescription = new Prescription();
-            prescription.setPrescriptionId("PRE" + System.currentTimeMillis());
-            prescription.setPatientId(patientId);
-            prescription.setPatientName(patientName);
-            prescription.setMedication(medication);
-            prescription.setDosage(""); // Empty dosage since field is removed
-            prescription.setFrequency(frequency);
-            prescription.setDuration(duration);
-            prescription.setInstructions(instructions);
-            prescription.setDoctorId(currentDoctorId);
-            prescription.setDoctorName(currentDoctorName);
-            prescription.setCreatedDate(getCurrentDateTime());
-            prescription.setStatus("Active");
-            
-            // Save prescription to database
-            boolean success = databaseHelper.addPrescription(prescription);
-            
-            if (success) {
-                showToast("✅ Prescription created successfully!");
-                clearForm();
-            } else {
-                showToast("❌ Failed to create prescription. Please try again.");
-            }
+            // Get patient name from Firebase RTDB (async)
+            getPatientName(patientId, patientName -> {
+                // Create prescription object
+                Prescription prescription = new Prescription();
+                prescription.setPrescriptionId("PRE" + System.currentTimeMillis());
+                prescription.setPatientId(patientId);
+                prescription.setPatientName(patientName);
+                prescription.setMedication(medication);
+                prescription.setDosage(""); // Empty dosage since field is removed
+                prescription.setFrequency(frequency);
+                prescription.setDuration(duration);
+                prescription.setInstructions(instructions);
+                prescription.setDoctorId(currentDoctorId);
+                prescription.setDoctorName(currentDoctorName);
+                prescription.setCreatedDate(getCurrentDateTime());
+                prescription.setStatus("Active");
+                
+                // Save prescription to database
+                boolean success = databaseHelper.addPrescription(prescription);
+                
+                if (success) {
+                    showToast("✅ Prescription created successfully!");
+                    clearForm();
+                } else {
+                    showToast("❌ Failed to create prescription. Please try again.");
+                }
+            });
         }
     }
 
@@ -175,13 +179,46 @@ public class CreatePrescriptionFragment extends Fragment {
         Toast.makeText(getContext(), message, Toast.LENGTH_SHORT).show();
     }
     
-    private String getPatientName(String patientId) {
-        // Get patient name from database
-        com.example.h_cas.models.Patient patient = databaseHelper.getPatientById(patientId);
-        if (patient != null) {
-            return patient.getFirstName() + " " + patient.getLastName();
+    private void getPatientName(String patientId, PatientNameCallback callback) {
+        // Get patient name from Firebase RTDB (primary source)
+        if (firebaseRTDBHelper != null) {
+            firebaseRTDBHelper.getPatientById(patientId, patient -> {
+                if (patient != null) {
+                    String fullName = patient.getFirstName() + " " + patient.getLastName();
+                    if (callback != null) callback.onResult(fullName);
+                } else {
+                    // Fallback to SQLite if not found in Firebase
+                    if (databaseHelper != null) {
+                        com.example.h_cas.models.Patient sqlitePatient = databaseHelper.getPatientById(patientId);
+                        if (sqlitePatient != null) {
+                            String fullName = sqlitePatient.getFirstName() + " " + sqlitePatient.getLastName();
+                            if (callback != null) callback.onResult(fullName);
+                        } else {
+                            if (callback != null) callback.onResult("Unknown Patient");
+                        }
+                    } else {
+                        if (callback != null) callback.onResult("Unknown Patient");
+                    }
+                }
+            });
+        } else {
+            // Fallback to SQLite if Firebase not available
+            if (databaseHelper != null) {
+                com.example.h_cas.models.Patient patient = databaseHelper.getPatientById(patientId);
+                if (patient != null) {
+                    String fullName = patient.getFirstName() + " " + patient.getLastName();
+                    if (callback != null) callback.onResult(fullName);
+                } else {
+                    if (callback != null) callback.onResult("Unknown Patient");
+                }
+            } else {
+                if (callback != null) callback.onResult("Unknown Patient");
+            }
         }
-        return "Unknown Patient";
+    }
+    
+    private interface PatientNameCallback {
+        void onResult(String patientName);
     }
     
     private String getCurrentDateTime() {

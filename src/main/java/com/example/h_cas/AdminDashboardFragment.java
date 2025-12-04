@@ -98,7 +98,7 @@ public class AdminDashboardFragment extends Fragment {
             String.valueOf(todaysCases),
             String.valueOf(pendingReviews)
         };
-        int[] statsColors = {R.color.primary_blue, R.color.success_green, R.color.warning_orange, R.color.accent_blue, R.color.error_red, R.color.text_secondary};
+        int[] statsColors = {R.color.admin_deep_purple, R.color.admin_deep_purple, R.color.admin_deep_purple, R.color.admin_deep_purple, R.color.admin_deep_purple, R.color.admin_deep_purple};
 
         StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors);
         statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));

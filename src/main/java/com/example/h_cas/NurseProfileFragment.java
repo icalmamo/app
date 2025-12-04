@@ -12,9 +12,25 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.provider.MediaStore;
+
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
+
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
@@ -64,6 +80,11 @@ public class NurseProfileFragment extends Fragment {
     // Edit States
     private boolean isPersonalInfoEditable = false;
     private boolean isProfessionalInfoEditable = false;
+    
+    // Profile Picture
+    private ActivityResultLauncher<Intent> imagePickerLauncher;
+    private FirebaseStorage storage;
+    private StorageReference storageReference;
 
     @Nullable
     @Override
@@ -75,11 +96,36 @@ public class NurseProfileFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         
+        // Initialize Firebase Storage
+        storage = FirebaseStorage.getInstance();
+        storageReference = storage.getReference();
+        
         // Initialize nurse profile functionality
         initializeViews(view);
         initializeData();
+        setupImagePicker();
         setupClickListeners();
         loadNurseProfile();
+    }
+    
+    /**
+     * Setup image picker launcher for gallery selection
+     */
+    private void setupImagePicker() {
+        imagePickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
+                    Intent data = result.getData();
+                    if (data != null) {
+                        Uri selectedImageUri = data.getData();
+                        if (selectedImageUri != null) {
+                            uploadProfilePicture(selectedImageUri);
+                        }
+                    }
+                }
+            }
+        );
     }
 
     /**
@@ -196,11 +242,63 @@ public class NurseProfileFragment extends Fragment {
                 setPersonalInfoEditable(false);
                 setProfessionalInfoEditable(false);
                 
+                // Load profile picture if available
+                if (currentNurse.getProfilePictureUrl() != null && !currentNurse.getProfilePictureUrl().isEmpty()) {
+                    loadProfilePicture(currentNurse.getProfilePictureUrl());
+                } else {
+                    profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+                }
+                
             } else {
                 showToast("Error loading nurse profile data");
             }
         } catch (Exception e) {
             showToast("Error loading profile: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Load profile picture from URL
+     */
+    private void loadProfilePicture(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty() || profileImageView == null) {
+            return;
+        }
+        
+        try {
+            // Use a background thread to load the image
+            new Thread(() -> {
+                try {
+                    URL url = new URL(imageUrl);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setDoInput(true);
+                    connection.connect();
+                    InputStream input = connection.getInputStream();
+                    Bitmap bitmap = BitmapFactory.decodeStream(input);
+                    
+                    // Update UI on main thread
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (profileImageView != null && bitmap != null) {
+                                profileImageView.setImageBitmap(bitmap);
+                            } else {
+                                profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    // Fallback to default avatar on error
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (profileImageView != null) {
+                                profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+                            }
+                        });
+                    }
+                }
+            }).start();
+        } catch (Exception e) {
+            profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
         }
     }
 
@@ -403,9 +501,128 @@ public class NurseProfileFragment extends Fragment {
      */
     private void showProfilePictureDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
-        builder.setTitle("Profile Picture");
-        builder.setMessage("Profile picture functionality will be implemented in future updates.");
-        builder.setPositiveButton("OK", null);
+        builder.setTitle("Change Profile Picture");
+        
+        // Build options list dynamically
+        java.util.ArrayList<String> options = new java.util.ArrayList<>();
+        options.add("Choose from Gallery");
+        if (currentNurse.getProfilePictureUrl() != null && !currentNurse.getProfilePictureUrl().isEmpty()) {
+            options.add("Remove Picture");
+        }
+        
+        String[] optionsArray = options.toArray(new String[0]);
+        
+        builder.setItems(optionsArray, (dialog, which) -> {
+            try {
+                switch (which) {
+                    case 0: // Choose from Gallery
+                        pickImageFromGallery();
+                        break;
+                    case 1: // Remove Picture (if available)
+                        if (options.size() > 1 && currentNurse.getProfilePictureUrl() != null) {
+                            removeProfilePicture();
+                        }
+                        break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                showToast("Error: " + e.getMessage());
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+    
+    /**
+     * Pick image from gallery
+     */
+    private void pickImageFromGallery() {
+        try {
+            if (imagePickerLauncher == null) {
+                showToast("Error: Image picker not initialized");
+                return;
+            }
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            imagePickerLauncher.launch(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+            showToast("Error opening gallery: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Upload profile picture to Firebase Storage
+     */
+    private void uploadProfilePicture(Uri imageUri) {
+        if (imageUri == null || storageReference == null) {
+            showToast("Error: Invalid image");
+            return;
+        }
+
+        showToast("Uploading profile picture...");
+        
+        try {
+            // Create reference to profile pictures folder
+            String fileName = "profile_" + loggedInEmployeeId + "_" + System.currentTimeMillis() + ".jpg";
+            StorageReference profileRef = storageReference.child("profile_pictures/" + fileName);
+            
+            // Upload file directly from URI
+            UploadTask uploadTask = profileRef.putFile(imageUri);
+            
+            uploadTask.addOnSuccessListener(taskSnapshot -> {
+                // Get download URL
+                profileRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                    String downloadUrl = uri.toString();
+                    
+                    // Update database with profile picture URL
+                    boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, downloadUrl);
+                    
+                    if (updated) {
+                        // Update current nurse object
+                        currentNurse.setProfilePictureUrl(downloadUrl);
+                        
+                        // Load the new image
+                        loadProfilePicture(downloadUrl);
+                        
+                        showToast("✅ Profile picture updated successfully!");
+                    } else {
+                        showToast("❌ Failed to update profile picture in database");
+                    }
+                }).addOnFailureListener(e -> {
+                    showToast("❌ Error getting download URL: " + e.getMessage());
+                });
+            }).addOnFailureListener(e -> {
+                showToast("❌ Error uploading image: " + e.getMessage());
+            });
+            
+        } catch (Exception e) {
+            showToast("❌ Error: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Remove profile picture
+     */
+    private void removeProfilePicture() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle("Remove Profile Picture");
+        builder.setMessage("Are you sure you want to remove your profile picture?");
+        builder.setPositiveButton("Remove", (dialog, which) -> {
+            // Update database
+            boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, null);
+            
+            if (updated) {
+                currentNurse.setProfilePictureUrl(null);
+                
+                // Reset to default avatar
+                profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+                
+                showToast("✅ Profile picture removed");
+            } else {
+                showToast("❌ Failed to remove profile picture");
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
         builder.show();
     }
 

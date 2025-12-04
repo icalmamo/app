@@ -354,7 +354,7 @@ public class AdminSettingsFragment extends Fragment {
             db.delete("healthcare_cases", null, null);
             db.delete("rfid_data", null, null);
             
-            db.close();
+            // Don't close database - SQLiteOpenHelper manages connection pool automatically
 
             showToast("⚠️ All patient and medical data has been cleared\n(Employee accounts preserved for system access)");
             updateDatabaseInfo();

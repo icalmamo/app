@@ -40,7 +40,7 @@ public class MainActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         
-        // Initialize Firebase before using FirebaseHelper
+     // Initialize Firebase before using FirebaseHelper
         FirebaseApp.initializeApp(this);
         firebaseHelper = new FirebaseHelper();
 
@@ -63,12 +63,13 @@ public class MainActivity extends AppCompatActivity {
         try {
             FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
             DatabaseReference myRef = database.getReference("connectionTest");
+            myRef.keepSynced(false);
 
-            // Write data
+            // Write lightweight test data
             myRef.setValue("Hello Firebase!");
 
-            // Read data
-            myRef.addValueEventListener(new ValueEventListener() {
+            // Read data once (avoid long-lived listener on test node)
+            myRef.addListenerForSingleValueEvent(new ValueEventListener() {
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
                     String value = dataSnapshot.getValue(String.class);
@@ -104,14 +105,37 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Handle user logout
+     * Handle user logout with confirmation dialog
      */
     private void handleLogout() {
-        Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
-        
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Logout");
+        builder.setMessage("Are you sure you want to log out?");
+        builder.setPositiveButton("Yes, Logout", (dialog, which) -> {
+            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
+            
+            Intent intent = new Intent(this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+    
+    @Override
+    public void onBackPressed() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Exit");
+        builder.setMessage("Are you sure you want to exit?");
+        builder.setPositiveButton("Yes, Exit", (dialog, which) -> {
+            finish();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
     }
 }

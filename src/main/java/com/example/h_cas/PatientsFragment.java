@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Patient;
 
 import java.util.List;
@@ -24,6 +25,7 @@ public class PatientsFragment extends Fragment {
 
     private RecyclerView recyclerView;
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
 
     @Nullable
     @Override
@@ -37,12 +39,24 @@ public class PatientsFragment extends Fragment {
         recyclerView = view.findViewById(R.id.patientsRecyclerView);
         recyclerView.setLayoutManager(new LinearLayoutManager(view.getContext()));
         databaseHelper = new HCasDatabaseHelper(view.getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(view.getContext());
         loadPatients();
     }
 
     private void loadPatients() {
-        List<Patient> patients = databaseHelper.getAllPatients();
-        recyclerView.setAdapter(new PatientsAdapter(patients));
+        // Fetch patients from Firebase RTDB (primary source)
+        if (firebaseRTDBHelper != null) {
+            firebaseRTDBHelper.getAllPatients(patients -> {
+                // Update UI on main thread
+                if (getActivity() != null && getView() != null) {
+                    recyclerView.setAdapter(new PatientsAdapter(patients));
+                }
+            });
+        } else {
+            // Fallback to SQLite if Firebase not available
+            List<Patient> patients = databaseHelper.getAllPatients();
+            recyclerView.setAdapter(new PatientsAdapter(patients));
+        }
     }
 
     private static class PatientsAdapter extends RecyclerView.Adapter<PatientsAdapter.PatientViewHolder> {

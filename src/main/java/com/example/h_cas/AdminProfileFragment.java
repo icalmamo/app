@@ -16,6 +16,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
@@ -71,10 +73,10 @@ public class AdminProfileFragment extends Fragment {
     private boolean isPersonalInfoEditable = false;
     
     // Profile Picture
-    private static final int PICK_IMAGE_REQUEST = 1;
     private Uri imageUri;
     private FirebaseStorage storage;
     private StorageReference storageReference;
+    private ActivityResultLauncher<Intent> imagePickerLauncher;
 
     @Nullable
     @Override
@@ -93,8 +95,42 @@ public class AdminProfileFragment extends Fragment {
         // Initialize admin profile functionality
         initializeViews(view);
         initializeData();
+        setupImagePicker();
         setupClickListeners();
         loadAdminProfile();
+    }
+    
+    /**
+     * Setup image picker launcher for gallery selection
+     */
+    private void setupImagePicker() {
+        imagePickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
+                    Intent data = result.getData();
+                    if (data != null) {
+                        // Check if it's from camera (has extra data)
+                        if (data.getExtras() != null && data.getExtras().get("data") != null) {
+                            Bitmap bitmap = (Bitmap) data.getExtras().get("data");
+                            if (bitmap != null) {
+                                // Convert bitmap to URI
+                                imageUri = getImageUri(bitmap);
+                                if (imageUri != null) {
+                                    uploadProfilePicture(imageUri);
+                                }
+                            }
+                        } else {
+                            // It's from gallery
+                            Uri selectedImageUri = data.getData();
+                            if (selectedImageUri != null) {
+                                uploadProfilePicture(selectedImageUri);
+                            }
+                        }
+                    }
+                }
+            }
+        );
     }
 
     /**
@@ -275,49 +311,51 @@ public class AdminProfileFragment extends Fragment {
     private void showProfilePictureDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
         builder.setTitle("Change Profile Picture");
-        builder.setItems(new String[]{"Take Photo", "Choose from Gallery", "Remove Picture"}, (dialog, which) -> {
-            switch (which) {
-                case 0:
-                    // Take Photo
-                    Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    if (takePictureIntent.resolveActivity(getActivity().getPackageManager()) != null) {
-                        startActivityForResult(takePictureIntent, PICK_IMAGE_REQUEST);
-                    }
-                    break;
-                case 1:
-                    // Choose from Gallery
-                    Intent pickImageIntent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                    pickImageIntent.setType("image/*");
-                    startActivityForResult(pickImageIntent, PICK_IMAGE_REQUEST);
-                    break;
-                case 2:
-                    // Remove Picture
-                    removeProfilePicture();
-                    break;
+        
+        // Build options list dynamically
+        java.util.ArrayList<String> options = new java.util.ArrayList<>();
+        options.add("Choose from Gallery");
+        if (currentAdmin.getProfilePictureUrl() != null && !currentAdmin.getProfilePictureUrl().isEmpty()) {
+            options.add("Remove Picture");
+        }
+        
+        String[] optionsArray = options.toArray(new String[0]);
+        
+        builder.setItems(optionsArray, (dialog, which) -> {
+            try {
+                switch (which) {
+                    case 0: // Choose from Gallery
+                        pickImageFromGallery();
+                        break;
+                    case 1: // Remove Picture (if available)
+                        if (options.size() > 1 && currentAdmin.getProfilePictureUrl() != null) {
+                            removeProfilePicture();
+                        }
+                        break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                showToast("Error: " + e.getMessage());
             }
         });
+        builder.setNegativeButton("Cancel", null);
         builder.show();
     }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == getActivity().RESULT_OK) {
-            if (data != null) {
-                if (data.getExtras() != null && data.getExtras().get("data") != null) {
-                    // Photo taken from camera
-                    Bitmap photo = (Bitmap) data.getExtras().get("data");
-                    imageUri = getImageUri(photo);
-                } else if (data.getData() != null) {
-                    // Image selected from gallery
-                    imageUri = data.getData();
-                }
-                
-                if (imageUri != null) {
-                    uploadProfilePicture(imageUri);
-                }
+    
+    /**
+     * Pick image from gallery
+     */
+    private void pickImageFromGallery() {
+        try {
+            if (imagePickerLauncher == null) {
+                showToast("Error: Image picker not initialized");
+                return;
             }
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            imagePickerLauncher.launch(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+            showToast("Error opening gallery: " + e.getMessage());
         }
     }
 

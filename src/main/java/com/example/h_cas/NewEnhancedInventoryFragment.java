@@ -170,7 +170,8 @@ public class NewEnhancedInventoryFragment extends Fragment {
                     filteredMedicines.addAll(allMedicines);
                     
                     if (medicineAdapter != null) {
-                        medicineAdapter.notifyDataSetChanged();
+                        // Use efficient DiffUtil update instead of notifyDataSetChanged
+                        medicineAdapter.setMedicines(filteredMedicines);
                     }
                     
                     updateEmptyState();
@@ -239,7 +240,8 @@ public class NewEnhancedInventoryFragment extends Fragment {
         }
         
         updateButtonStates();
-        medicineAdapter.notifyDataSetChanged();
+        // Use efficient DiffUtil update instead of notifyDataSetChanged
+        medicineAdapter.setMedicines(filteredMedicines);
         updateEmptyState();
     }
 
@@ -271,7 +273,8 @@ public class NewEnhancedInventoryFragment extends Fragment {
         }
         
         updateButtonStates();
-        medicineAdapter.notifyDataSetChanged();
+        // Use efficient DiffUtil update instead of notifyDataSetChanged
+        medicineAdapter.setMedicines(filteredMedicines);
         updateEmptyState();
     }
 
@@ -632,11 +635,64 @@ public class NewEnhancedInventoryFragment extends Fragment {
     }
 
     // Enhanced RecyclerView Adapter for medicines
+    // Optimized with DiffUtil for efficient updates
     private class MedicineAdapter extends RecyclerView.Adapter<MedicineAdapter.MedicineViewHolder> {
         private List<Medicine> medicines;
 
         public MedicineAdapter(List<Medicine> medicines) {
-            this.medicines = medicines;
+            this.medicines = medicines != null ? new ArrayList<>(medicines) : new ArrayList<>();
+        }
+        
+        /**
+         * Update medicines list efficiently using DiffUtil
+         */
+        public void setMedicines(List<Medicine> newMedicines) {
+            if (newMedicines == null) {
+                newMedicines = new ArrayList<>();
+            }
+            
+            // Use DiffUtil for efficient updates (only updates changed items)
+            androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(new MedicineDiffCallback(this.medicines, newMedicines));
+            
+            this.medicines.clear();
+            this.medicines.addAll(newMedicines);
+            diffResult.dispatchUpdatesTo(this);
+        }
+        
+        // DiffUtil callback for efficient RecyclerView updates
+        private class MedicineDiffCallback extends androidx.recyclerview.widget.DiffUtil.Callback {
+            private final List<Medicine> oldList;
+            private final List<Medicine> newList;
+            
+            public MedicineDiffCallback(List<Medicine> oldList, List<Medicine> newList) {
+                this.oldList = oldList;
+                this.newList = newList;
+            }
+            
+            @Override
+            public int getOldListSize() {
+                return oldList.size();
+            }
+            
+            @Override
+            public int getNewListSize() {
+                return newList.size();
+            }
+            
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldList.get(oldItemPosition).getMedicineId().equals(newList.get(newItemPosition).getMedicineId());
+            }
+            
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                Medicine oldMedicine = oldList.get(oldItemPosition);
+                Medicine newMedicine = newList.get(newItemPosition);
+                return oldMedicine.getMedicineId().equals(newMedicine.getMedicineId()) &&
+                       oldMedicine.getStockQuantity() == newMedicine.getStockQuantity() &&
+                       oldMedicine.getMedicineName().equals(newMedicine.getMedicineName());
+            }
         }
 
         @NonNull

@@ -18,26 +18,27 @@ import android.widget.Toast;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
-import androidx.core.view.GravityCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
+import com.example.h_cas.models.Medicine;
+import com.example.h_cas.models.Notification;
+import com.example.h_cas.utils.NotificationDropdownHelper;
+
+import java.util.List;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -47,12 +48,14 @@ import java.net.URL;
  * PharmacistDashboardActivity provides the main interface for pharmacists.
  * Features include medication dispensing, inventory management, drug interactions, and prescription verification.
  */
-public class PharmacistDashboardActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+public class PharmacistDashboardActivity extends AppCompatActivity {
 
-    private DrawerLayout drawerLayout;
-    private NavigationView navigationView;
+    private BottomNavigationView bottomNavigationView;
     private MaterialToolbar toolbar;
     private TextView welcomeTextView;
+    private ImageView notificationButton;
+    private ImageView logoutButton;
+    private TextView notificationBadge;
     private Employee currentPharmacist;
     private HCasDatabaseHelper databaseHelper;
     private String loggedInFullName;
@@ -61,6 +64,7 @@ public class PharmacistDashboardActivity extends AppCompatActivity implements Na
     private ImageView pharmacistAvatarImageView;
     private StorageReference storageReference;
     private ActivityResultLauncher<Intent> imagePickerLauncher;
+    private NotificationDropdownHelper notificationDropdownHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,13 +82,15 @@ public class PharmacistDashboardActivity extends AppCompatActivity implements Na
         initializeDatabase();
         initializeViews();
         setupToolbar();
-        setupNavigationDrawer();
+        setupBottomNavigation();
+        setupNotificationButton();
+        setupLogoutButton();
         setupImagePicker();
         initializeFirebaseStorage();
-        setupNavigationHeader();
         
         // Load default dashboard fragment
         loadFragment(new PharmacistDashboardFragment());
+        toolbar.setTitle("Pharmacist Dashboard");
     }
 
     private void initializeDatabase() {
@@ -112,75 +118,253 @@ public class PharmacistDashboardActivity extends AppCompatActivity implements Na
      * Initialize all view references from the layout
      */
     private void initializeViews() {
-        drawerLayout = findViewById(R.id.drawerLayout);
-        navigationView = findViewById(R.id.navigationView);
+        bottomNavigationView = findViewById(R.id.bottomNavigationView);
         toolbar = findViewById(R.id.toolbar);
         welcomeTextView = findViewById(R.id.welcomeTextView);
+        notificationButton = findViewById(R.id.notificationButton);
+        notificationBadge = findViewById(R.id.notificationBadge);
+        logoutButton = findViewById(R.id.logoutButton);
     }
 
     /**
-     * Setup the toolbar with navigation toggle
+     * Setup the toolbar
      */
     private void setupToolbar() {
         setSupportActionBar(toolbar);
-        
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawerLayout, toolbar, 
-                R.string.navigation_drawer_open, 
-                R.string.navigation_drawer_close
-        );
-        drawerLayout.addDrawerListener(toggle);
-        toggle.syncState();
     }
 
     /**
-     * Setup the navigation drawer
+     * Setup notification button click handler
      */
-    private void setupNavigationDrawer() {
-        navigationView.setNavigationItemSelectedListener(this);
-        
-        // Always keep Dashboard highlighted by default
-        navigationView.setCheckedItem(R.id.nav_pharmacist_dashboard);
-    }
-
-    /**
-     * Setup the navigation header with pharmacist info
-     */
-    private void setupNavigationHeader() {
-        View headerView = navigationView.getHeaderView(0);
-        pharmacistAvatarImageView = headerView.findViewById(R.id.pharmacistAvatarImageView);
-        TextView pharmacistNameTextView = headerView.findViewById(R.id.pharmacistNameTextView);
-        TextView pharmacistRoleTextView = headerView.findViewById(R.id.pharmacistRoleTextView);
-        
-        // Use the actual logged-in pharmacist's name exactly as entered by admin
-        if (loggedInFullName != null && !loggedInFullName.isEmpty()) {
-            pharmacistNameTextView.setText(loggedInFullName);
-        } else {
-            pharmacistNameTextView.setText(currentPharmacist.getFullName());
-        }
-        
-        if (loggedInRole != null && !loggedInRole.isEmpty()) {
-            pharmacistRoleTextView.setText(loggedInRole);
-        } else {
-            pharmacistRoleTextView.setText("Licensed Pharmacist");
-        }
-        
-        // Load profile picture if available
-        if (currentPharmacist.getProfilePictureUrl() != null && !currentPharmacist.getProfilePictureUrl().isEmpty()) {
-            loadProfilePicture(currentPharmacist.getProfilePictureUrl());
-        }
-        
-        // Make profile picture clickable
-        if (pharmacistAvatarImageView != null) {
-            pharmacistAvatarImageView.setOnClickListener(v -> {
-                try {
-                    showProfilePictureDialog();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    Toast.makeText(PharmacistDashboardActivity.this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                }
+    private void setupNotificationButton() {
+        if (notificationButton != null) {
+            notificationDropdownHelper = new NotificationDropdownHelper(this);
+            // Set listener to update badge when notifications change
+            notificationDropdownHelper.setNotificationCountListener(count -> {
+                updateNotificationBadge(count);
+            });
+            loadNotifications();
+            notificationButton.setOnClickListener(v -> {
+                notificationDropdownHelper.toggle(notificationButton);
             });
         }
+    }
+
+    /**
+     * Setup logout button click handler
+     */
+    private void setupLogoutButton() {
+        if (logoutButton != null) {
+            logoutButton.setOnClickListener(v -> {
+                handleLogout();
+            });
+        }
+    }
+
+    /**
+     * Handle user logout with confirmation dialog
+     */
+    private void handleLogout() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Logout");
+        builder.setMessage("Are you sure you want to log out?");
+        builder.setPositiveButton("Yes, Logout", (dialog, which) -> {
+            Intent intent = new Intent(PharmacistDashboardActivity.this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+    
+    @Override
+    public void onBackPressed() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Exit");
+        builder.setMessage("Are you sure you want to exit?");
+        builder.setPositiveButton("Yes, Exit", (dialog, which) -> {
+            finish();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+
+    /**
+     * Load notifications for Pharmacist - shows expired/expiring medicines
+     */
+    private void loadNotifications() {
+        // Load notifications in background thread
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            try {
+                // Get all medicines
+                List<com.example.h_cas.models.Medicine> allMedicines = databaseHelper != null ? 
+                    databaseHelper.getAllMedicines() : new java.util.ArrayList<>();
+                
+                // Filter expired and expiring medicines
+                java.util.List<com.example.h_cas.models.Medicine> expiredMedicines = new java.util.ArrayList<>();
+                java.util.List<com.example.h_cas.models.Medicine> expiringMedicines = new java.util.ArrayList<>();
+                
+                java.util.Calendar today = java.util.Calendar.getInstance();
+                java.util.Calendar thirtyDaysLater = java.util.Calendar.getInstance();
+                thirtyDaysLater.add(java.util.Calendar.DAY_OF_MONTH, 30);
+                
+                for (com.example.h_cas.models.Medicine medicine : allMedicines) {
+                    if (medicine.getExpiryDate() != null && !medicine.getExpiryDate().isEmpty()) {
+                        try {
+                            // Parse expiry date (assuming format like "2024-12-31" or "31/12/2024")
+                            java.util.Date expiryDate = parseDate(medicine.getExpiryDate());
+                            if (expiryDate != null) {
+                                java.util.Calendar expiryCal = java.util.Calendar.getInstance();
+                                expiryCal.setTime(expiryDate);
+                                
+                                if (expiryCal.before(today)) {
+                                    // Already expired
+                                    expiredMedicines.add(medicine);
+                                } else if (expiryCal.before(thirtyDaysLater)) {
+                                    // Expiring within 30 days
+                                    expiringMedicines.add(medicine);
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Skip if date parsing fails
+                        }
+                    }
+                }
+                
+                // Convert to notifications
+                java.util.List<Notification> notifications = new java.util.ArrayList<>();
+                
+                // Add expired medicines first (higher priority)
+                for (com.example.h_cas.models.Medicine medicine : expiredMedicines) {
+                    String message = "EXPIRED: " + medicine.getMedicineName() + 
+                        (medicine.getDosage() != null ? " (" + medicine.getDosage() + ")" : "") +
+                        " - Expired on " + medicine.getExpiryDate();
+                    Notification notif = new Notification(
+                        medicine.getMedicineId(),
+                        "Inventory Alert",
+                        message,
+                        "Urgent"
+                    );
+                    notifications.add(notif);
+                }
+                
+                // Add expiring medicines
+                for (com.example.h_cas.models.Medicine medicine : expiringMedicines) {
+                    String message = "Expiring soon: " + medicine.getMedicineName() + 
+                        (medicine.getDosage() != null ? " (" + medicine.getDosage() + ")" : "") +
+                        " - Expires on " + medicine.getExpiryDate();
+                    Notification notif = new Notification(
+                        medicine.getMedicineId(),
+                        "Inventory Alert",
+                        message,
+                        "Warning"
+                    );
+                    notifications.add(notif);
+                }
+                
+                // Limit to 10 most recent/urgent
+                final java.util.List<Notification> finalNotifications;
+                if (notifications.size() > 10) {
+                    finalNotifications = new java.util.ArrayList<>(notifications.subList(0, 10));
+                } else {
+                    finalNotifications = new java.util.ArrayList<>(notifications);
+                }
+                
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (notificationDropdownHelper != null) {
+                        notificationDropdownHelper.setNotifications(finalNotifications);
+                    }
+                    updateNotificationBadge(finalNotifications.size());
+                });
+            } catch (Exception e) {
+                android.util.Log.e("PharmacistDashboard", "Error loading notifications", e);
+            }
+        });
+    }
+
+    /**
+     * Parse date string to Date object
+     */
+    private java.util.Date parseDate(String dateString) {
+        if (dateString == null || dateString.isEmpty()) {
+            return null;
+        }
+        
+        // Try different date formats
+        java.text.SimpleDateFormat[] formats = {
+            new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()),
+            new java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()),
+            new java.text.SimpleDateFormat("MM/dd/yyyy", java.util.Locale.getDefault()),
+            new java.text.SimpleDateFormat("dd-MM-yyyy", java.util.Locale.getDefault())
+        };
+        
+        for (java.text.SimpleDateFormat format : formats) {
+            try {
+                return format.parse(dateString);
+            } catch (Exception e) {
+                // Try next format
+            }
+        }
+        
+        return null;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Refresh notifications when activity resumes
+        loadNotifications();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (notificationDropdownHelper != null) {
+            notificationDropdownHelper.cleanup();
+        }
+    }
+
+    /**
+     * Setup the bottom navigation bar
+     */
+    private void setupBottomNavigation() {
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            
+            if (itemId == R.id.nav_pharmacist_dashboard) {
+                loadFragment(new PharmacistDashboardFragment());
+                toolbar.setTitle("Pharmacist Dashboard");
+                return true;
+            } else if (itemId == R.id.nav_medication_dispensing) {
+                loadFragment(new MedicationDispensingFragment());
+                toolbar.setTitle("Medication Dispensing");
+                return true;
+            } else if (itemId == R.id.nav_inventory) {
+                loadFragment(new NewEnhancedInventoryFragment());
+                toolbar.setTitle("Inventory");
+                return true;
+            } else if (itemId == R.id.nav_prescription_verification) {
+                loadFragment(new PrescriptionVerificationFragment());
+                toolbar.setTitle("Prescription Verification");
+                return true;
+            } else if (itemId == R.id.nav_pharmacist_settings) {
+                loadFragment(new PharmacistSettingsFragment());
+                toolbar.setTitle("Settings");
+                return true;
+            }
+            
+            return false;
+        });
+        
+        // Set default selected item
+        bottomNavigationView.setSelectedItemId(R.id.nav_pharmacist_dashboard);
     }
     
     /**
@@ -493,82 +677,30 @@ public class PharmacistDashboardActivity extends AppCompatActivity implements Na
         transaction.replace(R.id.fragmentContainer, fragment);
         transaction.commit();
     }
-
-    @Override
-    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-        int itemId = item.getItemId();
-        
-        // Reset navigation scroll position to top
-        resetNavigationScrollToTop();
-        
-        if (itemId == R.id.nav_pharmacist_dashboard) {
-            loadFragment(new PharmacistDashboardFragment());
-            toolbar.setTitle("Pharmacist Dashboard");
-        } else if (itemId == R.id.nav_medication_dispensing) {
-            loadFragment(new MedicationDispensingFragment());
-            toolbar.setTitle("Medication Dispensing");
-        } else if (itemId == R.id.nav_inventory) {
-            loadFragment(new NewEnhancedInventoryFragment());
-            toolbar.setTitle("Enhanced Inventory");
-        } else if (itemId == R.id.nav_medicine_history) {
-            loadFragment(new MedicineHistoryFragment());
-            toolbar.setTitle("History of Medicine");
-        } else if (itemId == R.id.nav_prescription_verification) {
-            loadFragment(new PrescriptionVerificationFragment());
-            toolbar.setTitle("Prescription Verification");
-        } else if (itemId == R.id.nav_pharmacist_settings) {
-            loadFragment(new PharmacistSettingsFragment());
-            toolbar.setTitle("Settings");
-        } else if (itemId == R.id.nav_pharmacist_logout) {
-            handleLogout();
-            return true; // Don't continue if logout
-        }
-        
-        // Always force Dashboard to remain highlighted after any menu selection
-        navigationView.setCheckedItem(R.id.nav_pharmacist_dashboard);
-        
-        drawerLayout.closeDrawer(GravityCompat.START);
-        return true;
-    }
-
+    
     /**
-     * Handle pharmacist logout
+     * Update notification badge counter
      */
-    private void handleLogout() {
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
-    }
-
-    /**
-     * Reset navigation scroll position to top
-     */
-    private void resetNavigationScrollToTop() {
-        try {
-            // Find the ScrollView or RecyclerView inside NavigationView
-            ViewGroup navContainer = (ViewGroup) navigationView.getChildAt(0);
-            for (int i = 0; i < navContainer.getChildCount(); i++) {
-                View child = navContainer.getChildAt(i);
-                if (child instanceof android.widget.ScrollView) {
-                    ((android.widget.ScrollView) child).fullScroll(View.FOCUS_UP);
-                    break;
+    private void updateNotificationBadge(int count) {
+        if (notificationBadge != null) {
+            if (count > 0) {
+                notificationBadge.setVisibility(android.view.View.VISIBLE);
+                // Show count, but if > 99, show "99+"
+                if (count > 99) {
+                    notificationBadge.setText("99+");
+                    // Adjust size for longer text
+                    notificationBadge.getLayoutParams().width = (int) (24 * getResources().getDisplayMetrics().density);
+                } else {
+                    notificationBadge.setText(String.valueOf(count));
+                    notificationBadge.getLayoutParams().width = (int) (18 * getResources().getDisplayMetrics().density);
                 }
+                notificationBadge.requestLayout();
+            } else {
+                notificationBadge.setVisibility(android.view.View.GONE);
             }
-        } catch (Exception e) {
-            // Fallback: ignore scroll reset if not available
         }
     }
 
-    @SuppressLint("GestureBackNavigation")
-    @Override
-    public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START);
-        } else {
-            super.onBackPressed();
-        }
-    }
 }
 
 

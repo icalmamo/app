@@ -2,6 +2,7 @@ package com.example.h_cas;
 
 import android.app.AlertDialog;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,11 +19,14 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import com.example.h_cas.database.FirebaseHelper;
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ManageEmployeesFragment allows admins to view, add, edit, and manage all employees.
@@ -34,6 +38,8 @@ public class ManageEmployeesFragment extends Fragment {
     private FloatingActionButton addEmployeeButton;
     private HCasDatabaseHelper databaseHelper;
     private EmployeeAdapter employeeAdapter;
+    private FirebaseHelper firebaseHelper;
+    private com.google.firebase.database.ChildEventListener employeesListener;
 
     @Nullable
     @Override
@@ -50,6 +56,7 @@ public class ManageEmployeesFragment extends Fragment {
         setupRecyclerView();
         setupClickListeners();
         loadEmployees();
+        setupRealtimeListener();
     }
 
     private void initializeViews(View view) {
@@ -60,6 +67,12 @@ public class ManageEmployeesFragment extends Fragment {
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        try {
+            firebaseHelper = new FirebaseHelper();
+        } catch (Exception e) {
+            Log.e("ManageEmployees", "Failed to initialize FirebaseHelper", e);
+            firebaseHelper = null;
+        }
     }
 
     private void setupRecyclerView() {
@@ -99,6 +112,251 @@ public class ManageEmployeesFragment extends Fragment {
                     employeeAdapter.setEmployees(employees);
                 }
             });
+        });
+    }
+
+    /**
+     * Setup real-time listener for employees from Firebase
+     * This will automatically update the UI when employees are added/updated/deleted
+     * Uses ChildEventListener for instant updates (add, change, remove events)
+     */
+    private void setupRealtimeListener() {
+        if (firebaseHelper == null) {
+            Log.w("ManageEmployees", "FirebaseHelper not available - real-time updates disabled");
+            return;
+        }
+
+        // Use direct Firebase Database reference for better real-time performance
+        try {
+            com.google.firebase.database.DatabaseReference employeesRef = com.google.firebase.database.FirebaseDatabase.getInstance(
+                    "https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("employees");
+
+            // Use ChildEventListener for instant real-time updates
+            com.google.firebase.database.ChildEventListener childListener = new com.google.firebase.database.ChildEventListener() {
+                private final List<Employee> currentEmployees = new ArrayList<>();
+
+                @Override
+                public void onChildAdded(com.google.firebase.database.DataSnapshot snapshot, String previousChildName) {
+                    // New employee added - instant update
+                    try {
+                        Employee employee = convertSnapshotToEmployee(snapshot);
+                        if (employee != null && employee.isActive() && !"Administrator".equals(employee.getRole())) {
+                            currentEmployees.add(employee);
+                            syncEmployeeToSQLite(employee);
+                            updateUI();
+                            Log.d("ManageEmployees", "✅ Employee added (real-time): " + employee.getEmployeeId());
+                        }
+                    } catch (Exception e) {
+                        Log.e("ManageEmployees", "Error processing added employee", e);
+                    }
+                }
+
+                @Override
+                public void onChildChanged(com.google.firebase.database.DataSnapshot snapshot, String previousChildName) {
+                    // Employee data updated - instant update
+                    try {
+                        Employee updatedEmployee = convertSnapshotToEmployee(snapshot);
+                        if (updatedEmployee != null) {
+                            // Update in list
+                            for (int i = 0; i < currentEmployees.size(); i++) {
+                                if (currentEmployees.get(i).getEmployeeId().equals(updatedEmployee.getEmployeeId())) {
+                                    currentEmployees.set(i, updatedEmployee);
+                                    break;
+                                }
+                            }
+                            
+                            if (updatedEmployee.isActive() && !"Administrator".equals(updatedEmployee.getRole())) {
+                                syncEmployeeToSQLite(updatedEmployee);
+                                updateUI();
+                                Log.d("ManageEmployees", "✅ Employee updated (real-time): " + updatedEmployee.getEmployeeId());
+                            } else {
+                                // Employee deactivated, remove from list
+                                currentEmployees.removeIf(emp -> emp.getEmployeeId().equals(updatedEmployee.getEmployeeId()));
+                                updateUI();
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e("ManageEmployees", "Error processing changed employee", e);
+                    }
+                }
+
+                @Override
+                public void onChildRemoved(com.google.firebase.database.DataSnapshot snapshot) {
+                    // Employee removed - instant update
+                    try {
+                        String employeeId = snapshot.child("employee_id").getValue(String.class);
+                        if (employeeId != null) {
+                            currentEmployees.removeIf(emp -> emp.getEmployeeId().equals(employeeId));
+                            updateUI();
+                            Log.d("ManageEmployees", "✅ Employee removed (real-time): " + employeeId);
+                        }
+                    } catch (Exception e) {
+                        Log.e("ManageEmployees", "Error processing removed employee", e);
+                    }
+                }
+
+                @Override
+                public void onChildMoved(com.google.firebase.database.DataSnapshot snapshot, String previousChildName) {
+                    // Handle if needed (usually not needed for employees)
+                }
+
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    Log.e("ManageEmployees", "❌ Real-time listener cancelled: " + error.getMessage());
+                    // Fallback to SQLite
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> loadEmployees());
+                    }
+                }
+
+                private void updateUI() {
+                    if (getActivity() != null && getView() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            // Filter active employees only
+                            List<Employee> activeEmployees = new ArrayList<>();
+                            for (Employee emp : currentEmployees) {
+                                if (emp.isActive() && !"Administrator".equals(emp.getRole())) {
+                                    activeEmployees.add(emp);
+                                }
+                            }
+
+                            if (activeEmployees.isEmpty()) {
+                                emptyStateTextView.setVisibility(View.VISIBLE);
+                                employeesRecyclerView.setVisibility(View.GONE);
+                            } else {
+                                emptyStateTextView.setVisibility(View.GONE);
+                                employeesRecyclerView.setVisibility(View.VISIBLE);
+                                employeeAdapter.setEmployees(activeEmployees);
+                            }
+                        });
+                    }
+                }
+            };
+
+            // Add listener
+            employeesListener = employeesRef.addChildEventListener(childListener);
+            
+            // Also load initial data
+            employeesRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                @Override
+                public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                    List<Employee> initialEmployees = new ArrayList<>();
+                    for (com.google.firebase.database.DataSnapshot child : snapshot.getChildren()) {
+                        Employee employee = convertSnapshotToEmployee(child);
+                        if (employee != null && employee.isActive() && !"Administrator".equals(employee.getRole())) {
+                            initialEmployees.add(employee);
+                            syncEmployeeToSQLite(employee);
+                        }
+                    }
+                    
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (initialEmployees.isEmpty()) {
+                                emptyStateTextView.setVisibility(View.VISIBLE);
+                                employeesRecyclerView.setVisibility(View.GONE);
+                            } else {
+                                emptyStateTextView.setVisibility(View.GONE);
+                                employeesRecyclerView.setVisibility(View.VISIBLE);
+                                employeeAdapter.setEmployees(initialEmployees);
+                            }
+                        });
+                    }
+                    
+                    Log.d("ManageEmployees", "✅ Initial load: " + initialEmployees.size() + " employees");
+                }
+
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    Log.e("ManageEmployees", "❌ Initial load failed", error.toException());
+                    loadEmployees(); // Fallback to SQLite
+                }
+            });
+
+            Log.d("ManageEmployees", "✅ Real-time listener setup complete (ChildEventListener)");
+        } catch (Exception e) {
+            Log.e("ManageEmployees", "❌ Failed to setup real-time listener", e);
+            loadEmployees(); // Fallback to SQLite
+        }
+    }
+
+    /**
+     * Convert Firebase DataSnapshot to Employee object
+     */
+    private Employee convertSnapshotToEmployee(com.google.firebase.database.DataSnapshot snapshot) {
+        try {
+            Map<String, Object> data = (Map<String, Object>) snapshot.getValue();
+            if (data == null) return null;
+
+            Employee employee = new Employee();
+            
+            if (data.containsKey("employee_id")) {
+                employee.setEmployeeId(String.valueOf(data.get("employee_id")));
+            }
+            if (data.containsKey("first_name")) {
+                employee.setFirstName(String.valueOf(data.get("first_name")));
+            }
+            if (data.containsKey("last_name")) {
+                employee.setLastName(String.valueOf(data.get("last_name")));
+            }
+            if (data.containsKey("email")) {
+                employee.setEmail(String.valueOf(data.get("email")));
+            }
+            if (data.containsKey("phone")) {
+                employee.setPhone(String.valueOf(data.get("phone")));
+            }
+            if (data.containsKey("role")) {
+                employee.setRole(String.valueOf(data.get("role")));
+            }
+            if (data.containsKey("username")) {
+                employee.setUsername(String.valueOf(data.get("username")));
+            }
+            if (data.containsKey("is_active")) {
+                Object isActive = data.get("is_active");
+                if (isActive instanceof Boolean) {
+                    employee.setActive((Boolean) isActive);
+                } else if (isActive instanceof Number) {
+                    employee.setActive(((Number) isActive).intValue() == 1);
+                }
+            }
+
+            return employee;
+        } catch (Exception e) {
+            Log.e("ManageEmployees", "Error converting snapshot to employee", e);
+            return null;
+        }
+    }
+
+    /**
+     * Sync employee from Firebase to SQLite database
+     */
+    private void syncEmployeeToSQLite(Employee employee) {
+        if (databaseHelper == null || employee == null) return;
+
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            try {
+                // Check if employee already exists
+                Employee existing = databaseHelper.getEmployeeById(employee.getEmployeeId());
+                
+                if (existing == null) {
+                    // Employee doesn't exist, add it
+                    boolean success = databaseHelper.addEmployee(employee);
+                    if (success) {
+                        Log.d("ManageEmployees", "✅ Synced new employee to SQLite: " + employee.getEmployeeId());
+                    }
+                } else {
+                    // Employee exists, update it
+                    boolean success = databaseHelper.updateEmployee(employee);
+                    if (success) {
+                        Log.d("ManageEmployees", "✅ Updated employee in SQLite: " + employee.getEmployeeId());
+                    }
+                }
+                
+                // Invalidate cache
+                databaseHelper.invalidateEmployeeCache();
+            } catch (Exception e) {
+                Log.e("ManageEmployees", "❌ Error syncing employee to SQLite", e);
+            }
         });
     }
 
@@ -173,7 +431,36 @@ public class ManageEmployeesFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        loadEmployees(); // Refresh when returning to this screen
+        // Real-time listener will handle updates automatically
+        // Only load from SQLite as fallback if Firebase is not available
+        if (firebaseHelper == null) {
+            loadEmployees();
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Keep listener active even when paused for real-time updates
+        // Only remove if fragment is being destroyed
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // Remove real-time listener when view is destroyed
+        if (employeesListener != null) {
+            try {
+                com.google.firebase.database.DatabaseReference employeesRef = com.google.firebase.database.FirebaseDatabase.getInstance(
+                        "https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                        .getReference("employees");
+                
+                employeesRef.removeEventListener(employeesListener);
+                Log.d("ManageEmployees", "✅ Real-time listener removed");
+            } catch (Exception e) {
+                Log.e("ManageEmployees", "Error removing listener", e);
+            }
+        }
     }
 
     // RecyclerView Adapter for employees

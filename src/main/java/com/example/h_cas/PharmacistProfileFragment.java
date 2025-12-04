@@ -10,9 +10,25 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.provider.MediaStore;
+
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
+
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -58,18 +74,48 @@ public class PharmacistProfileFragment extends Fragment {
     // Edit mode flags
     private boolean isPersonalInfoEditable = false;
     private boolean isProfessionalInfoEditable = false;
+    
+    // Profile Picture
+    private ActivityResultLauncher<Intent> imagePickerLauncher;
+    private FirebaseStorage storage;
+    private StorageReference storageReference;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_pharmacist_profile, container, false);
         
+        // Initialize Firebase Storage
+        storage = FirebaseStorage.getInstance();
+        storageReference = storage.getReference();
+        
         initializeViews(view);
         initializeData();
+        setupImagePicker();
         setupClickListeners();
         loadPharmacistProfile();
         
         return view;
+    }
+    
+    /**
+     * Setup image picker launcher for gallery selection
+     */
+    private void setupImagePicker() {
+        imagePickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                if (result.getResultCode() == android.app.Activity.RESULT_OK && result.getData() != null) {
+                    Intent data = result.getData();
+                    if (data != null) {
+                        Uri selectedImageUri = data.getData();
+                        if (selectedImageUri != null) {
+                            uploadProfilePicture(selectedImageUri);
+                        }
+                    }
+                }
+            }
+        );
     }
 
     private void initializeViews(View view) {
@@ -148,16 +194,78 @@ public class PharmacistProfileFragment extends Fragment {
     }
 
     private void loadPharmacistProfile() {
+        // Load pharmacist data from database
+        try {
+            Employee pharmacistData = databaseHelper.getEmployeeByUsername(loggedInUsername);
+            if (pharmacistData != null) {
+                currentPharmacist = pharmacistData;
+            }
+        } catch (Exception e) {
+            // Use default data if loading fails
+        }
+        
         // Display pharmacist information
         pharmacistNameTextView.setText(loggedInFullName != null ? loggedInFullName : "Pharmacist Name");
         pharmacistRoleTextView.setText(loggedInRole != null ? loggedInRole : "Licensed Pharmacist");
         pharmacistIdTextView.setText("ID: " + (loggedInEmployeeId != null ? loggedInEmployeeId : "N/A"));
-        pharmacistEmailTextView.setText(loggedInEmail != null ? loggedInEmail : "pharmacist@hcas.com");
+        pharmacistEmailTextView.setText(currentPharmacist.getEmail() != null ? currentPharmacist.getEmail() : (loggedInEmail != null ? loggedInEmail : "pharmacist@hcas.com"));
         pharmacistPhoneTextView.setText(currentPharmacist.getPhone() != null ? currentPharmacist.getPhone() : "Not set");
         pharmacistAddressTextView.setText(currentPharmacist.getAddress() != null ? currentPharmacist.getAddress() : "Not set");
         pharmacistLicenseTextView.setText(currentPharmacist.getLicenseNumber() != null ? currentPharmacist.getLicenseNumber() : "Not set");
         pharmacistDepartmentTextView.setText(currentPharmacist.getDepartment() != null ? currentPharmacist.getDepartment() : "Not set");
         pharmacistExperienceTextView.setText(currentPharmacist.getExperience() != null ? currentPharmacist.getExperience() : "Not set");
+        
+        // Load profile picture if available
+        if (currentPharmacist.getProfilePictureUrl() != null && !currentPharmacist.getProfilePictureUrl().isEmpty()) {
+            loadProfilePicture(currentPharmacist.getProfilePictureUrl());
+        } else {
+            profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+        }
+    }
+    
+    /**
+     * Load profile picture from URL
+     */
+    private void loadProfilePicture(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty() || profileImageView == null) {
+            return;
+        }
+        
+        try {
+            // Use a background thread to load the image
+            new Thread(() -> {
+                try {
+                    URL url = new URL(imageUrl);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setDoInput(true);
+                    connection.connect();
+                    InputStream input = connection.getInputStream();
+                    Bitmap bitmap = BitmapFactory.decodeStream(input);
+                    
+                    // Update UI on main thread
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (profileImageView != null && bitmap != null) {
+                                profileImageView.setImageBitmap(bitmap);
+                            } else {
+                                profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    // Fallback to default avatar on error
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (profileImageView != null) {
+                                profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+                            }
+                        });
+                    }
+                }
+            }).start();
+        } catch (Exception e) {
+            profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+        }
     }
 
     private void togglePersonalInfoEdit() {
@@ -291,8 +399,127 @@ public class PharmacistProfileFragment extends Fragment {
     private void showProfilePictureDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
         builder.setTitle("Change Profile Picture");
-        builder.setMessage("Profile picture functionality will be implemented in a future update.");
-        builder.setPositiveButton("OK", null);
+        
+        // Build options list dynamically
+        java.util.ArrayList<String> options = new java.util.ArrayList<>();
+        options.add("Choose from Gallery");
+        if (currentPharmacist.getProfilePictureUrl() != null && !currentPharmacist.getProfilePictureUrl().isEmpty()) {
+            options.add("Remove Picture");
+        }
+        
+        String[] optionsArray = options.toArray(new String[0]);
+        
+        builder.setItems(optionsArray, (dialog, which) -> {
+            try {
+                switch (which) {
+                    case 0: // Choose from Gallery
+                        pickImageFromGallery();
+                        break;
+                    case 1: // Remove Picture (if available)
+                        if (options.size() > 1 && currentPharmacist.getProfilePictureUrl() != null) {
+                            removeProfilePicture();
+                        }
+                        break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                Toast.makeText(getContext(), "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+    
+    /**
+     * Pick image from gallery
+     */
+    private void pickImageFromGallery() {
+        try {
+            if (imagePickerLauncher == null) {
+                Toast.makeText(getContext(), "Error: Image picker not initialized", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            imagePickerLauncher.launch(intent);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(getContext(), "Error opening gallery: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    /**
+     * Upload profile picture to Firebase Storage
+     */
+    private void uploadProfilePicture(Uri imageUri) {
+        if (imageUri == null || storageReference == null) {
+            Toast.makeText(getContext(), "Error: Invalid image", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Toast.makeText(getContext(), "Uploading profile picture...", Toast.LENGTH_SHORT).show();
+        
+        try {
+            // Create reference to profile pictures folder
+            String fileName = "profile_" + loggedInEmployeeId + "_" + System.currentTimeMillis() + ".jpg";
+            StorageReference profileRef = storageReference.child("profile_pictures/" + fileName);
+            
+            // Upload file directly from URI
+            UploadTask uploadTask = profileRef.putFile(imageUri);
+            
+            uploadTask.addOnSuccessListener(taskSnapshot -> {
+                // Get download URL
+                profileRef.getDownloadUrl().addOnSuccessListener(uri -> {
+                    String downloadUrl = uri.toString();
+                    
+                    // Update database with profile picture URL
+                    boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, downloadUrl);
+                    
+                    if (updated) {
+                        // Update current pharmacist object
+                        currentPharmacist.setProfilePictureUrl(downloadUrl);
+                        
+                        // Load the new image
+                        loadProfilePicture(downloadUrl);
+                        
+                        Toast.makeText(getContext(), "✅ Profile picture updated successfully!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(getContext(), "❌ Failed to update profile picture in database", Toast.LENGTH_SHORT).show();
+                    }
+                }).addOnFailureListener(e -> {
+                    Toast.makeText(getContext(), "❌ Error getting download URL: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }).addOnFailureListener(e -> {
+                Toast.makeText(getContext(), "❌ Error uploading image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            });
+            
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "❌ Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    /**
+     * Remove profile picture
+     */
+    private void removeProfilePicture() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle("Remove Profile Picture");
+        builder.setMessage("Are you sure you want to remove your profile picture?");
+        builder.setPositiveButton("Remove", (dialog, which) -> {
+            // Update database
+            boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, null);
+            
+            if (updated) {
+                currentPharmacist.setProfilePictureUrl(null);
+                
+                // Reset to default avatar
+                profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+                
+                Toast.makeText(getContext(), "✅ Profile picture removed", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(getContext(), "❌ Failed to remove profile picture", Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton("Cancel", null);
         builder.show();
     }
 }

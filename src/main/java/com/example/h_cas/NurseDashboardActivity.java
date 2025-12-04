@@ -5,42 +5,49 @@ import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
-import androidx.core.view.GravityCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
+import com.example.h_cas.models.Notification;
+import com.example.h_cas.models.Prescription;
+import com.example.h_cas.utils.NotificationDropdownHelper;
+
+import java.util.List;
 
 /**
  * NurseDashboardActivity provides the main interface for nurses.
  * Features include patient care, vital signs monitoring, medication administration, and care plans.
  */
-public class NurseDashboardActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+public class NurseDashboardActivity extends AppCompatActivity {
 
-    private DrawerLayout drawerLayout;
-    private NavigationView navigationView;
+    private BottomNavigationView bottomNavigationView;
     private MaterialToolbar toolbar;
     private TextView welcomeTextView;
+    private ImageView notificationButton;
+    private ImageView logoutButton;
+    private TextView notificationBadge;
     private Employee currentNurse;
     private HCasDatabaseHelper databaseHelper;
     private String loggedInFullName;
     private String loggedInUsername;
     private String loggedInRole;
+    private NotificationDropdownHelper notificationDropdownHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,8 +65,9 @@ public class NurseDashboardActivity extends AppCompatActivity implements Navigat
         initializeDatabase();
         initializeViews();
         setupToolbar();
-        setupNavigationDrawer();
-        setupNavigationHeader();
+        setupBottomNavigation();
+        setupNotificationButton();
+        setupLogoutButton();
         
         // Load default dashboard fragment
         loadFragment(createNurseDashboardFragment());
@@ -89,57 +97,274 @@ public class NurseDashboardActivity extends AppCompatActivity implements Navigat
      * Initialize all view references from the layout
      */
     private void initializeViews() {
-        drawerLayout = findViewById(R.id.drawerLayout);
-        navigationView = findViewById(R.id.navigationView);
+        bottomNavigationView = findViewById(R.id.bottomNavigationView);
         toolbar = findViewById(R.id.toolbar);
         welcomeTextView = findViewById(R.id.welcomeTextView);
+        notificationButton = findViewById(R.id.notificationButton);
+        notificationBadge = findViewById(R.id.notificationBadge);
+        logoutButton = findViewById(R.id.logoutButton);
     }
 
     /**
-     * Setup the toolbar with navigation toggle
+     * Setup the toolbar
      */
     private void setupToolbar() {
         setSupportActionBar(toolbar);
-        
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawerLayout, toolbar, 
-                R.string.navigation_drawer_open, 
-                R.string.navigation_drawer_close
-        );
-        drawerLayout.addDrawerListener(toggle);
-        toggle.syncState();
     }
 
     /**
-     * Setup the navigation drawer
+     * Setup notification button click handler
      */
-    private void setupNavigationDrawer() {
-        navigationView.setNavigationItemSelectedListener(this);
-        
-        // Always keep Dashboard highlighted by default
-        navigationView.setCheckedItem(R.id.nav_nurse_dashboard);
+    private void setupNotificationButton() {
+        if (notificationButton != null) {
+            // Initialize notification dropdown helper
+            notificationDropdownHelper = new NotificationDropdownHelper(this);
+            
+            // Set listener to update badge when notifications change
+            notificationDropdownHelper.setNotificationCountListener(count -> {
+                updateNotificationBadge(count);
+            });
+            
+            // Load sample notifications (replace with actual data from database/Firebase)
+            loadNotifications();
+            
+            notificationButton.setOnClickListener(v -> {
+                // Toggle dropdown
+                notificationDropdownHelper.toggle(notificationButton);
+            });
+        }
     }
 
     /**
-     * Setup the navigation header with nurse info
+     * Setup logout button click handler
      */
-    private void setupNavigationHeader() {
-        View headerView = navigationView.getHeaderView(0);
-        TextView nurseNameTextView = headerView.findViewById(R.id.nurseNameTextView);
-        TextView nurseRoleTextView = headerView.findViewById(R.id.nurseRoleTextView);
-        
-        // Use the actual logged-in nurse's name
-        if (loggedInFullName != null && !loggedInFullName.isEmpty()) {
-            nurseNameTextView.setText(loggedInFullName);
-        } else {
-            nurseNameTextView.setText(currentNurse.getFullName());
+    private void setupLogoutButton() {
+        if (logoutButton != null) {
+            logoutButton.setOnClickListener(v -> {
+                handleLogout();
+            });
         }
-        
-        if (loggedInRole != null && !loggedInRole.isEmpty()) {
-            nurseRoleTextView.setText(loggedInRole);
-        } else {
-            nurseRoleTextView.setText("Registered Nurse");
+    }
+
+    /**
+     * Handle user logout with confirmation dialog
+     */
+    private void handleLogout() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Logout");
+        builder.setMessage("Are you sure you want to log out?");
+        builder.setPositiveButton("Yes, Logout", (dialog, which) -> {
+            Intent intent = new Intent(NurseDashboardActivity.this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+    
+    @Override
+    public void onBackPressed() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Exit");
+        builder.setMessage("Are you sure you want to exit?");
+        builder.setPositiveButton("Yes, Exit", (dialog, which) -> {
+            finish();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+
+    /**
+     * Load notifications for Nurse - shows doctor prescriptions and diagnosis
+     */
+    private void loadNotifications() {
+        // Load notifications in background thread
+        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+            try {
+                java.util.List<Notification> notifications = new java.util.ArrayList<>();
+                
+                // 1. Get prescriptions from doctors
+                List<com.example.h_cas.models.Prescription> prescriptions = databaseHelper != null ? 
+                    databaseHelper.getAllPrescriptions() : new java.util.ArrayList<>();
+                
+                // Convert prescriptions to notifications
+                int prescriptionCount = Math.min(prescriptions.size(), 5);
+                for (int i = 0; i < prescriptionCount; i++) {
+                    com.example.h_cas.models.Prescription prescription = prescriptions.get(i);
+                    String doctorName = prescription.getDoctorName() != null && !prescription.getDoctorName().isEmpty() 
+                        ? prescription.getDoctorName() 
+                        : "Doctor";
+                    String patientName = prescription.getPatientName() != null ? prescription.getPatientName() : "Patient";
+                    String medication = prescription.getMedication() != null ? prescription.getMedication() : "medication";
+                    
+                    String message = "Prescription for " + patientName + ": " + medication + 
+                        " (" + prescription.getDosage() + " - " + prescription.getFrequency() + ")";
+                    String timestamp = prescription.getCreatedDate() != null ? 
+                        formatTimestamp(prescription.getCreatedDate()) : "Recently";
+                    
+                    Notification notif = new Notification(
+                        prescription.getPrescriptionId(),
+                        doctorName,
+                        message,
+                        timestamp
+                    );
+                    notifications.add(notif);
+                }
+                
+                // 2. Get patients with recent diagnosis (vital signs/symptoms)
+                List<com.example.h_cas.models.Patient> allPatients = databaseHelper != null ? 
+                    databaseHelper.getAllPatients() : new java.util.ArrayList<>();
+                
+                // Filter patients with recent vital signs or symptoms (indicating diagnosis)
+                int diagnosisCount = 0;
+                for (com.example.h_cas.models.Patient patient : allPatients) {
+                    if (diagnosisCount >= 5) break; // Limit to 5 diagnosis notifications
+                    
+                    boolean hasDiagnosis = false;
+                    String diagnosisInfo = "";
+                    
+                    // Check for symptoms
+                    if (patient.getSymptomsDescription() != null && !patient.getSymptomsDescription().isEmpty()) {
+                        hasDiagnosis = true;
+                        diagnosisInfo = "Symptoms: " + patient.getSymptomsDescription();
+                    }
+                    
+                    // Check for vital signs
+                    if (patient.getBloodPressure() != null && !patient.getBloodPressure().isEmpty()) {
+                        hasDiagnosis = true;
+                        if (!diagnosisInfo.isEmpty()) diagnosisInfo += " | ";
+                        diagnosisInfo += "BP: " + patient.getBloodPressure();
+                    }
+                    
+                    if (patient.getTemperature() != null && !patient.getTemperature().isEmpty()) {
+                        hasDiagnosis = true;
+                        if (!diagnosisInfo.isEmpty()) diagnosisInfo += " | ";
+                        diagnosisInfo += "Temp: " + patient.getTemperature();
+                    }
+                    
+                    if (hasDiagnosis) {
+                        String patientName = patient.getFullName() != null && !patient.getFullName().isEmpty() 
+                            ? patient.getFullName() 
+                            : (patient.getFirstName() + " " + patient.getLastName()).trim();
+                        
+                        String message = "Diagnosis for " + patientName + ": " + diagnosisInfo;
+                        String timestamp = patient.getCreatedDate() != null ? 
+                            formatTimestamp(patient.getCreatedDate()) : "Recently";
+                        
+                        Notification notif = new Notification(
+                            patient.getPatientId() + "_diagnosis",
+                            "Doctor",
+                            message,
+                            timestamp
+                        );
+                        notifications.add(notif);
+                        diagnosisCount++;
+                    }
+                }
+                
+                // Limit total to 10 notifications
+                final java.util.List<Notification> finalNotifications;
+                if (notifications.size() > 10) {
+                    finalNotifications = new java.util.ArrayList<>(notifications.subList(0, 10));
+                } else {
+                    finalNotifications = new java.util.ArrayList<>(notifications);
+                }
+                
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (notificationDropdownHelper != null) {
+                        notificationDropdownHelper.setNotifications(finalNotifications);
+                    }
+                    updateNotificationBadge(finalNotifications.size());
+                });
+            } catch (Exception e) {
+                android.util.Log.e("NurseDashboard", "Error loading notifications", e);
+            }
+        });
+    }
+
+    /**
+     * Format timestamp for display
+     */
+    private String formatTimestamp(String dateString) {
+        if (dateString == null || dateString.isEmpty()) {
+            return "Recently";
         }
+        try {
+            if (dateString.contains(" ")) {
+                return dateString;
+            }
+            return dateString + " - Recently";
+        } catch (Exception e) {
+            return "Recently";
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Refresh notifications when activity resumes
+        loadNotifications();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (notificationDropdownHelper != null) {
+            notificationDropdownHelper.cleanup();
+        }
+    }
+
+    /**
+     * Setup the bottom navigation bar
+     */
+    private void setupBottomNavigation() {
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            
+            if (itemId == R.id.nav_nurse_dashboard) {
+                loadFragment(createNurseDashboardFragment());
+                toolbar.setTitle("Nurse Dashboard");
+                return true;
+            } else if (itemId == R.id.nav_patient_registration) {
+                loadFragment(new PatientRegistrationFragment());
+                toolbar.setTitle("Patient Registration");
+                return true;
+            } else if (itemId == R.id.nav_patient_monitoring) {
+                loadFragment(new PatientMonitoringFragment());
+                toolbar.setTitle("Patient Monitoring");
+                return true;
+            } else if (itemId == R.id.nav_registered_patients) {
+                loadFragment(new RegisteredPatientsFragment());
+                toolbar.setTitle("Registered Patients");
+                return true;
+            } else if (itemId == R.id.nav_nurse_profile) {
+                NurseProfileFragment profileFragment = new NurseProfileFragment();
+                Bundle args = new Bundle();
+                args.putString("FULL_NAME", loggedInFullName);
+                args.putString("USERNAME", loggedInUsername);
+                args.putString("ROLE", loggedInRole);
+                args.putString("EMPLOYEE_ID", currentNurse.getEmployeeId());
+                args.putString("FIRST_NAME", currentNurse.getFirstName());
+                args.putString("LAST_NAME", currentNurse.getLastName());
+                args.putString("EMAIL", currentNurse.getEmail());
+                profileFragment.setArguments(args);
+                loadFragment(profileFragment);
+                toolbar.setTitle("Nurse Profile");
+                return true;
+            }
+            
+            return false;
+        });
+        
+        // Set default selected item
+        bottomNavigationView.setSelectedItemId(R.id.nav_nurse_dashboard);
     }
 
     /**
@@ -165,89 +390,28 @@ public class NurseDashboardActivity extends AppCompatActivity implements Navigat
         transaction.replace(R.id.fragmentContainer, fragment);
         transaction.commit();
     }
-
-    @Override
-    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-        int itemId = item.getItemId();
-        
-        // Reset navigation scroll position to top
-        resetNavigationScrollToTop();
-        
-        if (itemId == R.id.nav_nurse_dashboard) {
-            loadFragment(createNurseDashboardFragment());
-            toolbar.setTitle("Nurse Dashboard");
-        } else if (itemId == R.id.nav_patient_registration) {
-            loadFragment(new PatientRegistrationFragment());
-            toolbar.setTitle("Registration");
-        } else if (itemId == R.id.nav_patient_monitoring) {
-            loadFragment(new PatientMonitoringFragment());
-            toolbar.setTitle("Monitoring");
-        } else if (itemId == R.id.nav_registered_patients) {
-            loadFragment(new RegisteredPatientsFragment());
-            toolbar.setTitle("Registered Patients");
-        } else if (itemId == R.id.nav_view_prescriptions) {
-            loadFragment(new ViewPrescriptionsFragment());
-            toolbar.setTitle("Doctor's Prescriptions");
-        } else if (itemId == R.id.nav_nurse_profile) {
-            NurseProfileFragment profileFragment = new NurseProfileFragment();
-            Bundle args = new Bundle();
-            args.putString("FULL_NAME", loggedInFullName);
-            args.putString("USERNAME", loggedInUsername);
-            args.putString("ROLE", loggedInRole);
-            args.putString("EMPLOYEE_ID", currentNurse.getEmployeeId());
-            args.putString("FIRST_NAME", currentNurse.getFirstName());
-            args.putString("LAST_NAME", currentNurse.getLastName());
-            args.putString("EMAIL", currentNurse.getEmail());
-            profileFragment.setArguments(args);
-            loadFragment(profileFragment);
-            toolbar.setTitle("Nurse Profile");
-        } else if (itemId == R.id.nav_nurse_logout) {
-            handleLogout();
-            return true; // Don't continue if logout
-        }
-        
-        // Always force Dashboard to remain highlighted after any menu selection
-        navigationView.setCheckedItem(R.id.nav_nurse_dashboard);
-        
-        drawerLayout.closeDrawer(GravityCompat.START);
-        return true;
-    }
-
+    
     /**
-     * Handle nurse logout
+     * Update notification badge counter
      */
-    private void handleLogout() {
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
-    }
-
-    /**
-     * Reset navigation scroll position to top
-     */
-    private void resetNavigationScrollToTop() {
-        try {
-            // Find the ScrollView or RecyclerView inside NavigationView
-            ViewGroup navContainer = (ViewGroup) navigationView.getChildAt(0);
-            for (int i = 0; i < navContainer.getChildCount(); i++) {
-                View child = navContainer.getChildAt(i);
-                if (child instanceof android.widget.ScrollView) {
-                    ((android.widget.ScrollView) child).fullScroll(View.FOCUS_UP);
-                    break;
+    private void updateNotificationBadge(int count) {
+        if (notificationBadge != null) {
+            if (count > 0) {
+                notificationBadge.setVisibility(android.view.View.VISIBLE);
+                // Show count, but if > 99, show "99+"
+                if (count > 99) {
+                    notificationBadge.setText("99+");
+                    // Adjust size for longer text
+                    notificationBadge.getLayoutParams().width = (int) (24 * getResources().getDisplayMetrics().density);
+                } else {
+                    notificationBadge.setText(String.valueOf(count));
+                    notificationBadge.getLayoutParams().width = (int) (18 * getResources().getDisplayMetrics().density);
                 }
+                notificationBadge.requestLayout();
+            } else {
+                notificationBadge.setVisibility(android.view.View.GONE);
             }
-        } catch (Exception e) {
-            // Fallback: ignore scroll reset if not available
         }
     }
 
-    @Override
-    public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START);
-        } else {
-            super.onBackPressed();
-        }
-    }
 }

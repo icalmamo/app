@@ -20,7 +20,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
     // Database information
     private static final String DATABASE_NAME = "hcas_healthcare.db";
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 7; // Updated to match existing database version
 
     // Employee table
     private static final String TABLE_EMPLOYEES = "employees";
@@ -95,6 +95,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     private static final String COLUMN_PATIENT_TEMPERATURE = "temperature";
     private static final String COLUMN_PATIENT_BLOOD_SUGAR = "blood_sugar";
     private static final String COLUMN_PATIENT_PAIN_SCALE = "pain_scale";
+    private static final String COLUMN_PATIENT_NFC_UID = "nfc_uid";
 
     // Prescriptions table constants
     private static final String TABLE_PRESCRIPTIONS = "prescriptions";
@@ -168,7 +169,8 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         COLUMN_PATIENT_TEMPERATURE + " TEXT, " +
         COLUMN_PATIENT_BLOOD_SUGAR + " TEXT, " +
         COLUMN_PATIENT_PAIN_SCALE + " TEXT, " +
-        COLUMN_PATIENT_SYMPTOMS_DESCRIPTION + " TEXT" +
+        COLUMN_PATIENT_SYMPTOMS_DESCRIPTION + " TEXT, " +
+        COLUMN_PATIENT_NFC_UID + " TEXT" +
         ")";
 
     private static final String CREATE_PRESCRIPTIONS_TABLE =
@@ -267,57 +269,43 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
      * Helper method to sync to Firebase (non-blocking)
      */
     private void syncToFirebase(String type, Object data) {
-        Log.d("HCasDatabaseHelper", "🔄 syncToFirebase called for type: " + type);
-        
         if (syncManager == null) {
-            Log.w("HCasDatabaseHelper", "⚠️ syncManager is null, attempting to initialize...");
             // Try to initialize sync manager if not already initialized
             if (context != null) {
                 try {
                     syncManager = new FirebaseSyncManager(context);
-                    Log.d("HCasDatabaseHelper", "✅ syncManager initialized");
                 } catch (Exception e) {
-                    Log.e("HCasDatabaseHelper", "❌ Failed to initialize syncManager", e);
+                    Log.e("HCasDatabaseHelper", "Failed to initialize syncManager", e);
                     return;
                 }
             } else {
-                Log.e("HCasDatabaseHelper", "❌ Context is null, cannot sync");
                 return;
             }
         }
         
         if (context == null) {
-            Log.e("HCasDatabaseHelper", "❌ Context is null, cannot sync");
             return;
         }
         
         try {
-            Log.d("HCasDatabaseHelper", "📤 Starting Firebase sync for " + type);
             // Run sync in background thread to avoid blocking
             new Thread(() -> {
                 try {
                     if (data instanceof com.example.h_cas.models.Medicine) {
-                        Log.d("HCasDatabaseHelper", "   Syncing Medicine...");
                         syncManager.syncMedicine((com.example.h_cas.models.Medicine) data);
                     } else if (data instanceof com.example.h_cas.models.Prescription) {
-                        Log.d("HCasDatabaseHelper", "   Syncing Prescription...");
                         syncManager.syncPrescription((com.example.h_cas.models.Prescription) data);
                     } else if (data instanceof com.example.h_cas.models.Patient) {
-                        Log.d("HCasDatabaseHelper", "   Syncing Patient...");
                         syncManager.syncPatient((com.example.h_cas.models.Patient) data);
                     } else if (data instanceof Employee) {
-                        Log.d("HCasDatabaseHelper", "   Syncing Employee...");
                         syncManager.syncEmployee((Employee) data);
-                    } else {
-                        Log.w("HCasDatabaseHelper", "⚠️ Unknown data type: " + (data != null ? data.getClass().getName() : "null"));
                     }
                 } catch (Exception e) {
-                    Log.e("HCasDatabaseHelper", "❌ Firebase sync failed for " + type, e);
-                    e.printStackTrace();
+                    Log.e("HCasDatabaseHelper", "Firebase sync failed for " + type, e);
                 }
             }).start();
         } catch (Exception e) {
-            Log.e("HCasDatabaseHelper", "❌ Error initiating Firebase sync", e);
+            Log.e("HCasDatabaseHelper", "Error initiating Firebase sync", e);
             e.printStackTrace();
         }
     }
@@ -341,16 +329,46 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // Drop existing tables
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_CASES);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_EMPLOYEES);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_PATIENTS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_PRESCRIPTIONS);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_MEDICINES);
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_RFID_DATA);
+        Log.d("HCasDatabaseHelper", "Upgrading database from version " + oldVersion + " to " + newVersion);
         
-        // Recreate tables
-        onCreate(db);
+        // Handle upgrades from different versions
+        if (oldVersion < newVersion) {
+            // Drop existing tables
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_CASES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_EMPLOYEES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_PATIENTS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_PRESCRIPTIONS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_MEDICINES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_RFID_DATA);
+            
+            // Recreate tables
+            onCreate(db);
+            Log.d("HCasDatabaseHelper", "Database upgraded successfully");
+        }
+    }
+    
+    @Override
+    public void onDowngrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        Log.w("HCasDatabaseHelper", "Downgrading database from version " + oldVersion + " to " + newVersion);
+        Log.w("HCasDatabaseHelper", "⚠️ WARNING: Database downgrade detected. This may cause data loss.");
+        
+        // Handle downgrade by recreating tables (data will be lost)
+        // This is necessary to prevent the "Can't downgrade database" error
+        try {
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_CASES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_EMPLOYEES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_PATIENTS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_PRESCRIPTIONS);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_MEDICINES);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_RFID_DATA);
+            
+            // Recreate tables with new version
+            onCreate(db);
+            Log.d("HCasDatabaseHelper", "Database downgraded and recreated successfully");
+        } catch (Exception e) {
+            Log.e("HCasDatabaseHelper", "Error during database downgrade", e);
+            throw e; // Re-throw to let SQLite handle it
+        }
     }
 
     /**
@@ -560,22 +578,39 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
     /**
      * Authenticate user login
+     * Supports both username and email authentication
+     * Only returns active employees (isActive = 1) - deleted employees cannot login
      */
     public Employee authenticateUser(String username, String password) {
         System.out.println("DEBUG: Database authenticateUser called with username: " + username);
         
-        String query = "SELECT * FROM " + TABLE_EMPLOYEES + 
-                      " WHERE " + COLUMN_USERNAME + " = ? AND " + COLUMN_PASSWORD + " = ? AND " + COLUMN_IS_ACTIVE + " = 1";
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        Employee employee = null;
+        
+        // Check if input is an email (contains @)
+        boolean isEmail = username != null && username.contains("@");
+        
+        String query;
+        if (isEmail) {
+            // Authenticate by email - only active employees (isActive = 1)
+            query = "SELECT * FROM " + TABLE_EMPLOYEES + 
+                   " WHERE " + COLUMN_EMAIL + " = ? AND " + COLUMN_PASSWORD + " = ? AND " + COLUMN_IS_ACTIVE + " = 1";
+            System.out.println("DEBUG: Authenticating by email: " + username);
+        } else {
+            // Authenticate by username - only active employees (isActive = 1)
+            query = "SELECT * FROM " + TABLE_EMPLOYEES + 
+                   " WHERE " + COLUMN_USERNAME + " = ? AND " + COLUMN_PASSWORD + " = ? AND " + COLUMN_IS_ACTIVE + " = 1";
+            System.out.println("DEBUG: Authenticating by username: " + username);
+        }
         
         System.out.println("DEBUG: Query: " + query);
-        System.out.println("DEBUG: Username: " + username + ", Password: " + password);
+        System.out.println("DEBUG: Username/Email: " + username + ", Password: " + password);
         
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{username, password});
+        cursor = db.rawQuery(query, new String[]{username, password});
         
         System.out.println("DEBUG: Cursor count: " + cursor.getCount());
         
-        Employee employee = null;
         if (cursor.moveToFirst()) {
             System.out.println("DEBUG: Found employee in database");
             employee = new Employee();
@@ -615,22 +650,27 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         
         String query = "SELECT * FROM " + TABLE_EMPLOYEES;
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        System.out.println("DEBUG: Total employees in database: " + cursor.getCount());
-        
-        if (cursor.moveToFirst()) {
-            do {
-                System.out.println("DEBUG: Employee - ID: " + cursor.getString(0) + 
-                                 ", Username: " + cursor.getString(6) + 
-                                 ", Password: " + cursor.getString(7) + 
-                                 ", Role: " + cursor.getString(5) + 
-                                 ", Active: " + cursor.getInt(9));
-            } while (cursor.moveToNext());
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            System.out.println("DEBUG: Total employees in database: " + cursor.getCount());
+            
+            if (cursor.moveToFirst()) {
+                do {
+                    System.out.println("DEBUG: Employee - ID: " + cursor.getString(0) + 
+                                     ", Username: " + cursor.getString(6) + 
+                                     ", Password: " + cursor.getString(7) + 
+                                     ", Role: " + cursor.getString(5) + 
+                                     ", Active: " + cursor.getInt(9));
+                } while (cursor.moveToNext());
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection for better performance
         }
-        
-        cursor.close();
-        db.close();
     }
 
     /**
@@ -641,16 +681,21 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                       " WHERE " + COLUMN_USERNAME + " = ? AND " + COLUMN_PASSWORD + " = ? AND " + COLUMN_IS_ACTIVE + " = 1";
         
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{username, password});
-        
-        boolean isValid = false;
-        if (cursor.moveToFirst()) {
-            isValid = cursor.getInt(0) > 0;
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{username, password});
+            
+            boolean isValid = false;
+            if (cursor.moveToFirst()) {
+                isValid = cursor.getInt(0) > 0;
+            }
+            return isValid;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection for better performance
         }
-        
-        cursor.close();
-        db.close();
-        return isValid;
     }
 
     /**
@@ -659,16 +704,21 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     public boolean isUsernameExists(String username) {
         String query = "SELECT COUNT(*) FROM " + TABLE_EMPLOYEES + " WHERE " + COLUMN_USERNAME + " = ?";
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{username});
-        
-        boolean exists = false;
-        if (cursor.moveToFirst()) {
-            exists = cursor.getInt(0) > 0;
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{username});
+            
+            boolean exists = false;
+            if (cursor.moveToFirst()) {
+                exists = cursor.getInt(0) > 0;
+            }
+            return exists;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection for better performance
         }
-        
-        cursor.close();
-        db.close();
-        return exists;
     }
 
     /**
@@ -677,16 +727,21 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
     public boolean isEmailExists(String email) {
         String query = "SELECT COUNT(*) FROM " + TABLE_EMPLOYEES + " WHERE " + COLUMN_EMAIL + " = ?";
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, new String[]{email});
-        
-        boolean exists = false;
-        if (cursor.moveToFirst()) {
-            exists = cursor.getInt(0) > 0;
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{email});
+            
+            boolean exists = false;
+            if (cursor.moveToFirst()) {
+                exists = cursor.getInt(0) > 0;
+            }
+            return exists;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection for better performance
         }
-        
-        cursor.close();
-        db.close();
-        return exists;
     }
 
     /**
@@ -734,6 +789,71 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             }
             // Don't close database - reuse connection
         }
+    }
+
+    /**
+     * Generate next available employee ID based on role
+     * Format: NUR001, DOC001, PHA001, etc.
+     * @param role The role of the employee (Nurse, Doctor, Pharmacist)
+     * @return The next available employee ID for the given role
+     */
+    public String generateNextEmployeeId(String role) {
+        String prefix = "";
+        
+        // Determine prefix based on role
+        switch (role) {
+            case "Nurse":
+                prefix = "NUR";
+                break;
+            case "Doctor":
+                prefix = "DOC";
+                break;
+            case "Pharmacist":
+                prefix = "PHA";
+                break;
+            default:
+                // Fallback: use first 3 letters of role in uppercase
+                prefix = role.length() >= 3 ? role.substring(0, 3).toUpperCase() : role.toUpperCase();
+                break;
+        }
+        
+        // Find the highest existing employee ID for this role prefix
+        String query = "SELECT " + COLUMN_EMPLOYEE_ID + " FROM " + TABLE_EMPLOYEES + 
+                       " WHERE " + COLUMN_EMPLOYEE_ID + " LIKE ?";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        int nextNumber = 1;
+        
+        try {
+            cursor = db.rawQuery(query, new String[]{prefix + "%"});
+            
+            // Find the highest number by iterating through all matching IDs
+            while (cursor.moveToNext()) {
+                String employeeId = cursor.getString(0);
+                if (employeeId != null && employeeId.length() >= 4 && employeeId.startsWith(prefix)) {
+                    try {
+                        // Extract the number part (after the 3-letter prefix)
+                        String numberPart = employeeId.substring(3);
+                        int currentNumber = Integer.parseInt(numberPart);
+                        if (currentNumber >= nextNumber) {
+                            nextNumber = currentNumber + 1;
+                        }
+                    } catch (NumberFormatException e) {
+                        // If parsing fails, skip this ID
+                        continue;
+                    }
+                }
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
+        }
+        
+        // Format: PREFIX + 3-digit number (e.g., NUR001, DOC002, PHA003)
+        return String.format("%s%03d", prefix, nextNumber);
     }
 
     /**
@@ -852,11 +972,13 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
 
     /**
      * Delete employee (soft delete)
+     * Sets isActive to 0, which prevents the employee from logging in
+     * The authenticateUser method filters by isActive = 1, so deleted employees cannot authenticate
      */
     public boolean deleteEmployee(String employeeId) {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
-        values.put(COLUMN_IS_ACTIVE, 0);
+        values.put(COLUMN_IS_ACTIVE, 0); // Set to inactive - prevents login
         
         int result = db.update(TABLE_EMPLOYEES, values, COLUMN_EMPLOYEE_ID + " = ?", new String[]{employeeId});
         // Don't close database - reuse connection
@@ -1031,6 +1153,16 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_PATIENT_PAIN_SCALE, patient.getPainScale());
         values.put(COLUMN_PATIENT_SYMPTOMS_DESCRIPTION, patient.getSymptomsDescription());
         values.put(COLUMN_PATIENT_BIRTH_PLACE, patient.getBirthPlace());
+        values.put(COLUMN_PATIENT_NFC_UID, patient.getNfcUid());
+        
+        // Set created_date - use patient's createdDate if available, otherwise use current timestamp
+        if (patient.getCreatedDate() != null && !patient.getCreatedDate().isEmpty()) {
+            values.put(COLUMN_PATIENT_CREATED_DATE, patient.getCreatedDate());
+        } else {
+            // Fallback to current timestamp if not set
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault());
+            values.put(COLUMN_PATIENT_CREATED_DATE, sdf.format(new java.util.Date()));
+        }
 
         long result = db.insert(TABLE_PATIENTS, null, values);
         // Don't close database - reuse connection
@@ -1090,6 +1222,10 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                     patient.setBloodSugar(cursor.getString(23));
                     patient.setPainScale(cursor.getString(24));
                     patient.setSymptomsDescription(cursor.getString(25));
+                    // NFC UID column (index 26)
+                    if (cursor.getColumnCount() > 26) {
+                        patient.setNfcUid(cursor.getString(26));
+                    }
                 }
                 
                 patients.add(patient);
@@ -1238,32 +1374,44 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         String query = "SELECT * FROM " + TABLE_PRESCRIPTIONS + " ORDER BY " + COLUMN_CREATED_DATE + " DESC";
         
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery(query, null);
-        
-        if (cursor.moveToFirst()) {
-            do {
-                com.example.h_cas.models.Prescription prescription = new com.example.h_cas.models.Prescription();
-                prescription.setPrescriptionId(cursor.isNull(0) ? null : cursor.getString(0));
-                prescription.setPatientId(cursor.isNull(1) ? null : cursor.getString(1));
-                prescription.setPatientName(cursor.isNull(2) ? null : cursor.getString(2));
-                prescription.setMedication(cursor.isNull(3) ? null : cursor.getString(3));
-                prescription.setDosage(cursor.isNull(4) ? null : cursor.getString(4));
-                prescription.setFrequency(cursor.isNull(5) ? null : cursor.getString(5));
-                prescription.setDuration(cursor.isNull(6) ? null : cursor.getString(6));
-                prescription.setInstructions(cursor.isNull(7) ? null : cursor.getString(7));
-                prescription.setDoctorId(cursor.isNull(8) ? null : cursor.getString(8));
-                prescription.setDoctorName(cursor.isNull(9) ? null : cursor.getString(9));
-                prescription.setCreatedDate(cursor.isNull(10) ? null : cursor.getString(10));
-                prescription.setStatus(cursor.isNull(11) ? null : cursor.getString(11));
-                
-                prescriptions.add(prescription);
-            } while (cursor.moveToNext());
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, null);
+            
+            if (cursor != null && cursor.moveToFirst()) {
+                do {
+                    try {
+                        com.example.h_cas.models.Prescription prescription = new com.example.h_cas.models.Prescription();
+                        prescription.setPrescriptionId(cursor.isNull(0) ? null : cursor.getString(0));
+                        prescription.setPatientId(cursor.isNull(1) ? null : cursor.getString(1));
+                        prescription.setPatientName(cursor.isNull(2) ? null : cursor.getString(2));
+                        prescription.setMedication(cursor.isNull(3) ? null : cursor.getString(3));
+                        prescription.setDosage(cursor.isNull(4) ? null : cursor.getString(4));
+                        prescription.setFrequency(cursor.isNull(5) ? null : cursor.getString(5));
+                        prescription.setDuration(cursor.isNull(6) ? null : cursor.getString(6));
+                        prescription.setInstructions(cursor.isNull(7) ? null : cursor.getString(7));
+                        prescription.setDoctorId(cursor.isNull(8) ? null : cursor.getString(8));
+                        prescription.setDoctorName(cursor.isNull(9) ? null : cursor.getString(9));
+                        prescription.setCreatedDate(cursor.isNull(10) ? null : cursor.getString(10));
+                        prescription.setStatus(cursor.isNull(11) ? null : cursor.getString(11));
+                        
+                        prescriptions.add(prescription);
+                    } catch (Exception e) {
+                        Log.e("HCasDatabaseHelper", "Error parsing prescription row: " + e.getMessage(), e);
+                        // Continue with next row
+                    }
+                } while (cursor.moveToNext());
+            }
+            
+            Log.d("HCasDatabaseHelper", "getAllPrescriptions: Found " + prescriptions.size() + " prescriptions");
+        } catch (Exception e) {
+            Log.e("HCasDatabaseHelper", "Error getting all prescriptions: " + e.getMessage(), e);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
         }
-        
-        if (cursor != null) {
-            cursor.close();
-        }
-        // Don't close database - reuse connection
         return prescriptions;
     }
 
@@ -1310,6 +1458,14 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
                     patient.setBloodSugar(cursor.getString(23));
                     patient.setPainScale(cursor.getString(24));
                     patient.setSymptomsDescription(cursor.getString(25));
+                    // NFC UID column (index 26)
+                    if (cursor.getColumnCount() > 26) {
+                        patient.setNfcUid(cursor.getString(26));
+                    }
+                }
+                // Set created date
+                if (cursor.getColumnCount() > 10) {
+                    patient.setCreatedDate(cursor.getString(10));
                 }
             }
             return patient;
@@ -1319,6 +1475,178 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
             }
             // Don't close database - reuse connection
         }
+    }
+
+    /**
+     * Get patient by NFC UID (CRUD - Read)
+     */
+    public com.example.h_cas.models.Patient getPatientByNfcUid(String nfcUid) {
+        if (nfcUid == null || nfcUid.isEmpty()) {
+            return null;
+        }
+        
+        String query = "SELECT * FROM " + TABLE_PATIENTS + " WHERE " + COLUMN_PATIENT_NFC_UID + " = ?";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{nfcUid});
+            
+            com.example.h_cas.models.Patient patient = null;
+            if (cursor.moveToFirst()) {
+                patient = new com.example.h_cas.models.Patient();
+                patient.setPatientId(cursor.getString(0));
+                patient.setFirstName(cursor.getString(1));
+                patient.setLastName(cursor.getString(2));
+                patient.setDateOfBirth(cursor.getString(3));
+                patient.setGender(cursor.getString(4));
+                patient.setAddress(cursor.getString(5));
+                patient.setPhone(cursor.getString(6));
+                patient.setEmail(cursor.getString(7));
+                patient.setEmergencyContactName(cursor.getString(8));
+                patient.setEmergencyContactPhone(cursor.getString(9));
+                patient.setCreatedDate(cursor.getString(10));
+                
+                // Extended fields
+                if (cursor.getColumnCount() > 10) {
+                    patient.setSuffix(cursor.getString(11));
+                    patient.setFullName(cursor.getString(12));
+                    patient.setBirthPlace(cursor.getString(13));
+                    patient.setAge(cursor.getString(14));
+                    patient.setFullAddress(cursor.getString(15));
+                    patient.setPhoneNumber(cursor.getString(16));
+                    patient.setAllergies(cursor.getString(17));
+                    patient.setMedications(cursor.getString(18));
+                    patient.setMedicalHistory(cursor.getString(19));
+                    patient.setPulseRate(cursor.getString(20));
+                    patient.setBloodPressure(cursor.getString(21));
+                    patient.setTemperature(cursor.getString(22));
+                    patient.setBloodSugar(cursor.getString(23));
+                    patient.setPainScale(cursor.getString(24));
+                    patient.setSymptomsDescription(cursor.getString(25));
+                    // NFC UID column (index 26)
+                    if (cursor.getColumnCount() > 26) {
+                        patient.setNfcUid(cursor.getString(26));
+                    }
+                }
+            }
+            return patient;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
+        }
+    }
+    
+    /**
+     * Update patient NFC UID (CRUD - Update)
+     */
+    public boolean updatePatientNfcUid(String patientId, String nfcUid) {
+        if (patientId == null || patientId.isEmpty()) {
+            return false;
+        }
+        
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COLUMN_PATIENT_NFC_UID, nfcUid);
+        
+        int result = db.update(TABLE_PATIENTS, values, COLUMN_PATIENT_ID + " = ?", 
+                             new String[]{patientId});
+        // Don't close database - reuse connection
+        
+        // Sync to Firebase if successful
+        if (result > 0) {
+            com.example.h_cas.models.Patient patient = getPatientById(patientId);
+            if (patient != null) {
+                syncToFirebase("patient", patient);
+            }
+        }
+        
+        return result > 0;
+    }
+    
+    /**
+     * Remove patient NFC UID (CRUD - Delete)
+     */
+    public boolean removePatientNfcUid(String patientId) {
+        return updatePatientNfcUid(patientId, null);
+    }
+    
+    /**
+     * Check if NFC UID is already assigned to another patient
+     */
+    public boolean isNfcUidAssigned(String nfcUid, String excludePatientId) {
+        if (nfcUid == null || nfcUid.isEmpty()) {
+            return false;
+        }
+        
+        String query = "SELECT COUNT(*) FROM " + TABLE_PATIENTS + 
+                      " WHERE " + COLUMN_PATIENT_NFC_UID + " = ?";
+        String[] args = {nfcUid};
+        
+        if (excludePatientId != null && !excludePatientId.isEmpty()) {
+            query += " AND " + COLUMN_PATIENT_ID + " != ?";
+            args = new String[]{nfcUid, excludePatientId};
+        }
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, args);
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0) > 0;
+            }
+            return false;
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
+        }
+    }
+
+    /**
+     * Get prescriptions by patient ID
+     */
+    public java.util.List<com.example.h_cas.models.Prescription> getPrescriptionsByPatientId(String patientId) {
+        java.util.List<com.example.h_cas.models.Prescription> prescriptions = new java.util.ArrayList<>();
+        String query = "SELECT * FROM " + TABLE_PRESCRIPTIONS + 
+                       " WHERE " + COLUMN_PATIENT_ID + " = ? AND " + COLUMN_STATUS + " != 'Dispensed'" +
+                       " ORDER BY " + COLUMN_CREATED_DATE + " DESC";
+        
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = null;
+        try {
+            cursor = db.rawQuery(query, new String[]{patientId});
+            
+            if (cursor.moveToFirst()) {
+                do {
+                    com.example.h_cas.models.Prescription prescription = new com.example.h_cas.models.Prescription();
+                    prescription.setPrescriptionId(cursor.getString(0));
+                    prescription.setPatientId(cursor.getString(1));
+                    prescription.setPatientName(cursor.getString(2));
+                    prescription.setMedication(cursor.getString(3));
+                    prescription.setDosage(cursor.getString(4));
+                    prescription.setFrequency(cursor.getString(5));
+                    prescription.setDuration(cursor.getString(6));
+                    prescription.setInstructions(cursor.getString(7));
+                    prescription.setDoctorId(cursor.getString(8));
+                    prescription.setDoctorName(cursor.getString(9));
+                    prescription.setCreatedDate(cursor.getString(10));
+                    prescription.setStatus(cursor.getString(11));
+                    
+                    prescriptions.add(prescription);
+                } while (cursor.moveToNext());
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+            // Don't close database - reuse connection
+        }
+        
+        return prescriptions;
     }
 
     /**
@@ -1394,7 +1722,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         }
         
         cursor.close();
-        db.close();
+        // Don't close database - SQLiteOpenHelper manages connection pool automatically
         return medicine;
     }
 
@@ -1468,7 +1796,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         }
         
         cursor.close();
-        db.close();
+        // Don't close database - SQLiteOpenHelper manages connection pool automatically
         return rfidData;
     }
 
@@ -1560,10 +1888,17 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         values.put(COLUMN_PATIENT_PAIN_SCALE, patient.getPainScale());
         values.put(COLUMN_PATIENT_SYMPTOMS_DESCRIPTION, patient.getSymptomsDescription());
         values.put(COLUMN_PATIENT_BIRTH_PLACE, patient.getBirthPlace());
+        values.put(COLUMN_PATIENT_NFC_UID, patient.getNfcUid());
+        
+        // Preserve created_date - only update if patient object has a new created_date, otherwise keep existing
+        if (patient.getCreatedDate() != null && !patient.getCreatedDate().isEmpty()) {
+            values.put(COLUMN_PATIENT_CREATED_DATE, patient.getCreatedDate());
+        }
+        // If created_date is null/empty, don't update it (preserve original registration date)
         
         int result = db.update(TABLE_PATIENTS, values, COLUMN_PATIENT_ID + " = ?", 
                              new String[]{patient.getPatientId()});
-        db.close();
+        // Don't close database - SQLiteOpenHelper manages connection pool automatically
         
         // Sync to Firebase if successful
         if (result > 0) {
@@ -1778,7 +2113,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         }
         
         cursor.close();
-        db.close();
+        // Don't close database - SQLiteOpenHelper manages connection pool automatically
         return medicine;
     }
 
@@ -1796,7 +2131,7 @@ public class HCasDatabaseHelper extends SQLiteOpenHelper {
         }
         
         cursor.close();
-        db.close();
+        // Don't close database - SQLiteOpenHelper manages connection pool automatically
         return count;
     }
 

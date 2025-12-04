@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.h_cas.models.Patient;
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +36,7 @@ public class PatientMonitoringFragment extends Fragment {
     private List<Patient> patientList;
     private PatientAdapter patientAdapter;
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
 
     @Nullable
     @Override
@@ -76,6 +78,7 @@ public class PatientMonitoringFragment extends Fragment {
      */
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
     
     /**
@@ -93,26 +96,45 @@ public class PatientMonitoringFragment extends Fragment {
     }
     
     /**
-     * Load patients from database
+     * Load patients from Firebase RTDB (primary source)
      */
     private void loadPatients() {
-        // Load patients in background to avoid blocking UI
-        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-            List<Patient> patients = databaseHelper.getAllPatients();
-            
-            // Update UI on main thread
-            com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                if (getContext() == null || getView() == null) {
-                    return; // Fragment is detached
-                }
-                patientList.clear();
-                patientList.addAll(patients);
-                patientAdapter.notifyDataSetChanged();
-                
-                updatePatientCount();
-                updateMonitoringStatus();
+        // Fetch patients from Firebase RTDB
+        if (firebaseRTDBHelper != null) {
+            firebaseRTDBHelper.getAllPatients(patients -> {
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (getContext() == null || getView() == null) {
+                        return; // Fragment is detached
+                    }
+                    // Use efficient DiffUtil update instead of notifyDataSetChanged
+                    patientAdapter.setPatients(patients);
+                    patientList.clear();
+                    patientList.addAll(patients);
+                    
+                    updatePatientCount();
+                    updateMonitoringStatus();
+                });
             });
-        });
+        } else {
+            // Fallback to SQLite if Firebase not available
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                List<Patient> patients = databaseHelper.getAllPatients();
+                
+                // Update UI on main thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                    if (getContext() == null || getView() == null) {
+                        return; // Fragment is detached
+                    }
+                    patientAdapter.setPatients(patients);
+                    patientList.clear();
+                    patientList.addAll(patients);
+                    
+                    updatePatientCount();
+                    updateMonitoringStatus();
+                });
+            });
+        }
     }
     
     /**
@@ -153,12 +175,65 @@ public class PatientMonitoringFragment extends Fragment {
     
     /**
      * PatientAdapter for RecyclerView
+     * Optimized with DiffUtil for efficient updates
      */
     private class PatientAdapter extends RecyclerView.Adapter<PatientAdapter.PatientViewHolder> {
         private List<Patient> patients;
         
         public PatientAdapter(List<Patient> patients) {
-            this.patients = patients;
+            this.patients = patients != null ? new ArrayList<>(patients) : new ArrayList<>();
+        }
+        
+        /**
+         * Update patients list efficiently using DiffUtil
+         */
+        public void setPatients(List<Patient> newPatients) {
+            if (newPatients == null) {
+                newPatients = new ArrayList<>();
+            }
+            
+            // Use DiffUtil for efficient updates (only updates changed items)
+            androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(new PatientDiffCallback(this.patients, newPatients));
+            
+            this.patients.clear();
+            this.patients.addAll(newPatients);
+            diffResult.dispatchUpdatesTo(this);
+        }
+        
+        // DiffUtil callback for efficient RecyclerView updates
+        private class PatientDiffCallback extends androidx.recyclerview.widget.DiffUtil.Callback {
+            private final List<Patient> oldList;
+            private final List<Patient> newList;
+            
+            public PatientDiffCallback(List<Patient> oldList, List<Patient> newList) {
+                this.oldList = oldList;
+                this.newList = newList;
+            }
+            
+            @Override
+            public int getOldListSize() {
+                return oldList.size();
+            }
+            
+            @Override
+            public int getNewListSize() {
+                return newList.size();
+            }
+            
+            @Override
+            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return oldList.get(oldItemPosition).getPatientId().equals(newList.get(newItemPosition).getPatientId());
+            }
+            
+            @Override
+            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                Patient oldPatient = oldList.get(oldItemPosition);
+                Patient newPatient = newList.get(newItemPosition);
+                return oldPatient.getPatientId().equals(newPatient.getPatientId()) &&
+                       oldPatient.getFirstName().equals(newPatient.getFirstName()) &&
+                       oldPatient.getLastName().equals(newPatient.getLastName());
+            }
         }
         
         @NonNull

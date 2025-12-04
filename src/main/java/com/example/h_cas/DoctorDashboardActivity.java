@@ -2,47 +2,56 @@ package com.example.h_cas;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
-import androidx.core.view.GravityCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Employee;
+import com.example.h_cas.models.Notification;
+import com.example.h_cas.models.Patient;
+import com.example.h_cas.utils.NotificationDropdownHelper;
+
+import com.google.firebase.database.ChildEventListener;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * DoctorDashboardActivity provides the main interface for doctors.
  * Features include patient management, diagnosis, prescriptions, and medical records.
  */
-public class DoctorDashboardActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+public class DoctorDashboardActivity extends AppCompatActivity {
 
-    private DrawerLayout drawerLayout;
-    private NavigationView navigationView;
+    private BottomNavigationView bottomNavigationView;
     private MaterialToolbar toolbar;
     private TextView welcomeTextView;
+    private ImageView notificationButton;
+    private ImageView logoutButton;
+    private TextView notificationBadge;
     private Employee currentDoctor;
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
     private String loggedInFullName;
     private String loggedInUsername;
     private String loggedInRole;
-    private ActionBarDrawerToggle drawerToggle;
+    private NotificationDropdownHelper notificationDropdownHelper;
+    private ChildEventListener newPatientsListener;
+    private final Set<String> knownPatientIds = new HashSet<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,10 +59,7 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_doctor_dashboard);
         
-        // Initialize views first
-        initializeViews();
-        
-        // Apply window insets for edge-to-edge display (same as NurseDashboardActivity)
+        // Apply window insets for edge-to-edge display
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.doctorMainLayout), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -61,16 +67,20 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         });
 
         initializeDatabase();
+        initializeViews();
         setupToolbar();
-        setupNavigationDrawer();
-        setupNavigationHeader();
+        setupBottomNavigation();
+        setupNotificationButton();
+        setupLogoutButton();
         
         // Load default dashboard fragment
         loadFragment(new DoctorDashboardFragment());
+        toolbar.setTitle("Doctor Dashboard");
     }
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(this);
+        firebaseRTDBHelper = new FirebaseRTDBHelper(this);
         
         // Get employee data from intent
         Intent intent = getIntent();
@@ -92,78 +102,251 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
      * Initialize all view references from the layout
      */
     private void initializeViews() {
-        drawerLayout = findViewById(R.id.drawerLayout);
-        navigationView = findViewById(R.id.navigationView);
+        bottomNavigationView = findViewById(R.id.bottomNavigationView);
         toolbar = findViewById(R.id.toolbar);
         welcomeTextView = findViewById(R.id.welcomeTextView);
+        notificationButton = findViewById(R.id.notificationButton);
+        notificationBadge = findViewById(R.id.notificationBadge);
+        logoutButton = findViewById(R.id.logoutButton);
     }
 
     /**
-     * Setup the toolbar with navigation toggle
+     * Setup the toolbar
      */
     private void setupToolbar() {
         setSupportActionBar(toolbar);
-        
-        // Create drawer toggle FIRST - this handles the hamburger icon
-        drawerToggle = new ActionBarDrawerToggle(
-                this, drawerLayout, toolbar, 
-                R.string.navigation_drawer_open, 
-                R.string.navigation_drawer_close
-        );
-        drawerLayout.addDrawerListener(drawerToggle);
-        
-        // CRITICAL: Enable home button AFTER creating toggle - this makes hamburger icon clickable
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setHomeButtonEnabled(true);
+    }
+
+    /**
+     * Setup notification button click handler
+     */
+    private void setupNotificationButton() {
+        if (notificationButton != null) {
+            notificationDropdownHelper = new NotificationDropdownHelper(this);
+            // Set listener to update badge when notifications change
+            notificationDropdownHelper.setNotificationCountListener(count -> {
+                updateNotificationBadge(count);
+            });
+            loadNotifications();
+            notificationButton.setOnClickListener(v -> {
+                notificationDropdownHelper.toggle(notificationButton);
+            });
         }
-        
-        // Sync state to show hamburger icon - MUST be called after setDisplayHomeAsUpEnabled
-        drawerToggle.syncState();
-        
-        // Keep drawer unlocked so hamburger button works
-        drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START);
     }
 
     /**
-     * Setup the navigation drawer
+     * Setup logout button click handler
      */
-    private void setupNavigationDrawer() {
-        navigationView.setNavigationItemSelectedListener(this);
-        
-        // Always keep Dashboard highlighted by default
-        navigationView.setCheckedItem(R.id.nav_doctor_dashboard);
+    private void setupLogoutButton() {
+        if (logoutButton != null) {
+            logoutButton.setOnClickListener(v -> {
+                handleLogout();
+            });
+        }
     }
 
     /**
-     * Setup the navigation header with doctor info
+     * Handle user logout with confirmation dialog
      */
-    private void setupNavigationHeader() {
-        View headerView = navigationView.getHeaderView(0);
-        TextView doctorNameTextView = headerView.findViewById(R.id.doctorNameTextView);
-        TextView doctorRoleTextView = headerView.findViewById(R.id.doctorRoleTextView);
-        ImageView doctorAvatarImageView = headerView.findViewById(R.id.doctorAvatarImageView);
-        
-        // Use the actual logged-in doctor's name exactly as entered by admin
-        if (loggedInFullName != null && !loggedInFullName.isEmpty()) {
-            doctorNameTextView.setText(loggedInFullName);
+    private void handleLogout() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Logout");
+        builder.setMessage("Are you sure you want to log out?");
+        builder.setPositiveButton("Yes, Logout", (dialog, which) -> {
+            Intent intent = new Intent(DoctorDashboardActivity.this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+    
+    @Override
+    public void onBackPressed() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Exit");
+        builder.setMessage("Are you sure you want to exit?");
+        builder.setPositiveButton("Yes, Exit", (dialog, which) -> {
+            finish();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+
+    /**
+     * Load notifications for Doctor - shows registered patients from Firebase RTDB
+     */
+    private void loadNotifications() {
+        // Load patients from Firebase RTDB (primary source)
+        if (firebaseRTDBHelper != null) {
+            firebaseRTDBHelper.getAllPatients(patients -> {
+                // Process on background thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                    try {
+                        // Convert patients to notifications
+                        java.util.List<Notification> notifications = new java.util.ArrayList<>();
+                        synchronized (knownPatientIds) {
+                            knownPatientIds.clear();
+                        }
+                        
+                        // Limit to recent 10 patients
+                        int count = Math.min(patients.size(), 10);
+                        for (int i = 0; i < count; i++) {
+                            com.example.h_cas.models.Patient patient = patients.get(i);
+                            if (patient.getPatientId() != null) {
+                                synchronized (knownPatientIds) {
+                                    knownPatientIds.add(patient.getPatientId());
+                                }
+                            }
+                            String patientName = patient.getFullName() != null && !patient.getFullName().isEmpty() 
+                                ? patient.getFullName() 
+                                : (patient.getFirstName() + " " + patient.getLastName()).trim();
+                            
+                            String message = "New patient registered: " + patientName;
+                            String timestamp = patient.getCreatedDate() != null ? 
+                                formatTimestamp(patient.getCreatedDate()) : "Recently";
+                            
+                            Notification notif = new Notification(
+                                patient.getPatientId(),
+                                "Patient Registration",
+                                message,
+                                timestamp
+                            );
+                            notifications.add(notif);
+                        }
+                        
+                        // Update UI on main thread
+                        com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                            if (notificationDropdownHelper != null) {
+                                notificationDropdownHelper.setNotifications(notifications);
+                            }
+                            updateNotificationBadge(notifications.size());
+                            subscribeToNewPatientNotifications();
+                        });
+                    } catch (Exception e) {
+                        android.util.Log.e("DoctorDashboard", "Error loading notifications", e);
+                    }
+                });
+            });
         } else {
-            doctorNameTextView.setText(currentDoctor.getFullName());
+            // Fallback to SQLite if Firebase not available
+            com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                try {
+                    // Get registered patients
+                    List<com.example.h_cas.models.Patient> patients = databaseHelper != null ? 
+                        databaseHelper.getAllPatients() : new java.util.ArrayList<>();
+                    
+                    // Convert patients to notifications
+                    java.util.List<Notification> notifications = new java.util.ArrayList<>();
+                    synchronized (knownPatientIds) {
+                        knownPatientIds.clear();
+                    }
+                    
+                    // Limit to recent 10 patients
+                    int count = Math.min(patients.size(), 10);
+                    for (int i = 0; i < count; i++) {
+                        com.example.h_cas.models.Patient patient = patients.get(i);
+                        if (patient.getPatientId() != null) {
+                            synchronized (knownPatientIds) {
+                                knownPatientIds.add(patient.getPatientId());
+                            }
+                        }
+                        String patientName = patient.getFullName() != null && !patient.getFullName().isEmpty() 
+                            ? patient.getFullName() 
+                            : (patient.getFirstName() + " " + patient.getLastName()).trim();
+                        
+                        String message = "New patient registered: " + patientName;
+                        String timestamp = patient.getCreatedDate() != null ? 
+                            formatTimestamp(patient.getCreatedDate()) : "Recently";
+                        
+                        Notification notif = new Notification(
+                            patient.getPatientId(),
+                            "Patient Registration",
+                            message,
+                            timestamp
+                        );
+                        notifications.add(notif);
+                    }
+                    
+                    // Update UI on main thread
+                    com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
+                        if (notificationDropdownHelper != null) {
+                            notificationDropdownHelper.setNotifications(notifications);
+                        }
+                        updateNotificationBadge(notifications.size());
+                        subscribeToNewPatientNotifications();
+                    });
+                } catch (Exception e) {
+                    android.util.Log.e("DoctorDashboard", "Error loading notifications", e);
+                }
+            });
         }
-        
-        // Always set role as "Doctor" to match admin design
-        doctorRoleTextView.setText("Doctor");
-        
-        // Load profile picture if available
-        if (currentDoctor != null && currentDoctor.getProfilePictureUrl() != null && !currentDoctor.getProfilePictureUrl().isEmpty()) {
-            loadProfilePicture(doctorAvatarImageView, currentDoctor.getProfilePictureUrl());
+    }
+
+    /**
+     * Format timestamp for display
+     */
+    private String formatTimestamp(String dateString) {
+        if (dateString == null || dateString.isEmpty()) {
+            return "Recently";
         }
-        
-        // Make header clickable to open profile (optional enhancement)
-        View profileSection = headerView.findViewById(R.id.profileSection);
-        if (profileSection != null) {
-            profileSection.setOnClickListener(v -> {
-                // Navigate to doctor profile
+        // Simple formatting - you can enhance this with proper date parsing
+        try {
+            // If dateString contains time, use it; otherwise add "Recently"
+            if (dateString.contains(" ")) {
+                return dateString;
+            }
+            return dateString + " - Recently";
+        } catch (Exception e) {
+            return "Recently";
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Refresh notifications when activity resumes
+        loadNotifications();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (notificationDropdownHelper != null) {
+            notificationDropdownHelper.cleanup();
+        }
+        if (firebaseRTDBHelper != null && newPatientsListener != null) {
+            firebaseRTDBHelper.removePatientListener(newPatientsListener);
+            newPatientsListener = null;
+        }
+    }
+
+    /**
+     * Setup the bottom navigation bar
+     */
+    private void setupBottomNavigation() {
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
+            
+            if (itemId == R.id.nav_doctor_dashboard) {
+                loadFragment(new DoctorDashboardFragment());
+                toolbar.setTitle("Doctor Dashboard");
+                return true;
+            } else if (itemId == R.id.nav_registered_patients) {
+                loadFragment(new RegisteredPatientsFragment());
+                toolbar.setTitle("Registered Patients");
+                return true;
+            } else if (itemId == R.id.nav_patient_history) {
+                loadFragment(new PatientHistoryFragment());
+                toolbar.setTitle("Patient History");
+                return true;
+            } else if (itemId == R.id.nav_doctor_profile) {
                 DoctorProfileFragment profileFragment = new DoctorProfileFragment();
                 Bundle args = new Bundle();
                 args.putString("FULL_NAME", loggedInFullName);
@@ -176,19 +359,14 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
                 profileFragment.setArguments(args);
                 loadFragment(profileFragment);
                 toolbar.setTitle("Doctor's Profile");
-                updateNavigationSelection(R.id.nav_doctor_profile);
-                drawerLayout.closeDrawer(GravityCompat.START);
-            });
-        }
-    }
-    
-    /**
-     * Load profile picture from URL
-     */
-    private void loadProfilePicture(ImageView imageView, String imageUrl) {
-        // TODO: Implement image loading from URL if needed
-        // For now, use default avatar
-        // You can use Glide, Picasso, or similar library here
+                return true;
+            }
+            
+            return false;
+        });
+        
+        // Set default selected item
+        bottomNavigationView.setSelectedItemId(R.id.nav_doctor_dashboard);
     }
 
     /**
@@ -200,135 +378,6 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
         FragmentTransaction transaction = fragmentManager.beginTransaction();
         transaction.replace(R.id.fragmentContainer, fragment);
         transaction.commit();
-        
-        // Show back button if not on dashboard, show hamburger menu if on dashboard
-        updateToolbarNavigation(fragment instanceof DoctorDashboardFragment);
-    }
-    
-    /**
-     * Update toolbar navigation icon based on current fragment
-     * @param isDashboard true if on dashboard, false otherwise
-     */
-    private void updateToolbarNavigation(boolean isDashboard) {
-        if (isDashboard) {
-            // On dashboard - let ActionBarDrawerToggle handle everything normally
-            // Don't interfere with the toggle - just ensure drawer is unlocked
-            drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START);
-            drawerToggle.setDrawerIndicatorEnabled(true);
-            toolbar.setNavigationIcon(null); // Let toggle draw the hamburger
-            toolbar.setNavigationOnClickListener(null); // Let toggle handle clicks
-            
-            // Ensure home button is enabled
-            if (getSupportActionBar() != null) {
-                getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-                getSupportActionBar().setHomeButtonEnabled(true);
-            }
-            
-            // Sync state - this will show the hamburger icon
-            drawerToggle.syncState();
-        } else {
-            // On other fragments - show back button instead of hamburger
-            drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.START);
-            drawerToggle.setDrawerIndicatorEnabled(false);
-            toolbar.setNavigationIcon(R.drawable.ic_arrow_back);
-            toolbar.setNavigationOnClickListener(v -> {
-                loadFragment(new DoctorDashboardFragment());
-                toolbar.setTitle("Doctor Dashboard");
-                updateNavigationSelection(R.id.nav_doctor_dashboard);
-            });
-        }
-    }
-    
-    @Override
-    public boolean onOptionsItemSelected(@NonNull android.view.MenuItem item) {
-        // Let ActionBarDrawerToggle handle hamburger button - this is the standard way
-        // It will automatically open/close the drawer when hamburger is clicked
-        if (drawerToggle != null && drawerToggle.onOptionsItemSelected(item)) {
-            return true;
-        }
-        
-        // Handle back button for non-dashboard fragments
-        if (item.getItemId() == android.R.id.home) {
-            Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragmentContainer);
-            if (!(currentFragment instanceof DoctorDashboardFragment)) {
-                // Not on dashboard - handle as back button
-                loadFragment(new DoctorDashboardFragment());
-                toolbar.setTitle("Doctor Dashboard");
-                updateNavigationSelection(R.id.nav_doctor_dashboard);
-                return true;
-            }
-        }
-        
-        return super.onOptionsItemSelected(item);
-    }
-    
-    @Override
-    protected void onPostCreate(Bundle savedInstanceState) {
-        super.onPostCreate(savedInstanceState);
-        // Sync the toggle state after onRestoreInstanceState has occurred
-        if (drawerToggle != null) {
-            drawerToggle.syncState();
-        }
-    }
-    
-    @Override
-    public void onConfigurationChanged(@NonNull android.content.res.Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        // Sync the toggle state after configuration change
-        if (drawerToggle != null) {
-            drawerToggle.onConfigurationChanged(newConfig);
-        }
-    }
-
-    @Override
-    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-        int itemId = item.getItemId();
-        
-        // Reset navigation scroll position to top
-        resetNavigationScrollToTop();
-        
-        if (itemId == R.id.nav_doctor_dashboard) {
-            loadFragment(new DoctorDashboardFragment());
-            toolbar.setTitle("Doctor Dashboard");
-        } else if (itemId == R.id.nav_registered_patients) {
-            loadFragment(new RegisteredPatientsFragment());
-            toolbar.setTitle("Registered Patients");
-        } else if (itemId == R.id.nav_patient_history) {
-            loadFragment(new PatientHistoryFragment());
-            toolbar.setTitle("Patient History");
-        } else if (itemId == R.id.nav_doctor_profile) {
-            DoctorProfileFragment profileFragment = new DoctorProfileFragment();
-            Bundle args = new Bundle();
-            args.putString("FULL_NAME", loggedInFullName);
-            args.putString("USERNAME", loggedInUsername);
-            args.putString("ROLE", loggedInRole);
-            args.putString("EMPLOYEE_ID", currentDoctor.getEmployeeId());
-            args.putString("FIRST_NAME", currentDoctor.getFirstName());
-            args.putString("LAST_NAME", currentDoctor.getLastName());
-            args.putString("EMAIL", currentDoctor.getEmail());
-            profileFragment.setArguments(args);
-            loadFragment(profileFragment);
-            toolbar.setTitle("Doctor's Profile");
-        } else if (itemId == R.id.nav_doctor_logout) {
-            handleLogout();
-            return true; // Don't continue if logout
-        }
-        
-        // Always force Dashboard to remain highlighted after any menu selection
-        navigationView.setCheckedItem(R.id.nav_doctor_dashboard);
-        
-        drawerLayout.closeDrawer(GravityCompat.START);
-        return true;
-    }
-
-    /**
-     * Handle doctor logout
-     */
-    private void handleLogout() {
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
     }
     
     /**
@@ -346,51 +395,77 @@ public class DoctorDashboardActivity extends AppCompatActivity implements Naviga
     }
     
     /**
-     * Update navigation drawer selection
+     * Get bottom navigation view (for fragments to update selection)
      */
-    public void updateNavigationSelection(int itemId) {
-        navigationView.setCheckedItem(itemId);
+    public BottomNavigationView getBottomNavigationView() {
+        return bottomNavigationView;
     }
-
+    
     /**
-     * Reset navigation scroll position to top
+     * Update notification badge counter
      */
-    private void resetNavigationScrollToTop() {
-        try {
-            // Find the ScrollView or RecyclerView inside NavigationView
-            ViewGroup navContainer = (ViewGroup) navigationView.getChildAt(0);
-            for (int i = 0; i < navContainer.getChildCount(); i++) {
-                View child = navContainer.getChildAt(i);
-                if (child instanceof android.widget.ScrollView) {
-                    ((android.widget.ScrollView) child).fullScroll(View.FOCUS_UP);
-                    break;
+    private void updateNotificationBadge(int count) {
+        if (notificationBadge != null) {
+            if (count > 0) {
+                notificationBadge.setVisibility(android.view.View.VISIBLE);
+                // Show count, but if > 99, show "99+"
+                if (count > 99) {
+                    notificationBadge.setText("99+");
+                    // Adjust size for longer text
+                    notificationBadge.getLayoutParams().width = (int) (24 * getResources().getDisplayMetrics().density);
+                } else {
+                    notificationBadge.setText(String.valueOf(count));
+                    notificationBadge.getLayoutParams().width = (int) (18 * getResources().getDisplayMetrics().density);
                 }
+                notificationBadge.requestLayout();
+            } else {
+                notificationBadge.setVisibility(android.view.View.GONE);
             }
-        } catch (Exception e) {
-            // Fallback: ignore scroll reset if not available
         }
     }
-
-    @Override
-    public void onBackPressed() {
-        // Check if drawer is open
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START);
+    
+    /**
+     * Listen for new patients being registered in Firebase RTDB and update notifications in real-time.
+     */
+    private void subscribeToNewPatientNotifications() {
+        if (firebaseRTDBHelper == null || newPatientsListener != null) {
             return;
         }
         
-        // Check if we're on a fragment other than dashboard
-        Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.fragmentContainer);
-        if (currentFragment != null && !(currentFragment instanceof DoctorDashboardFragment)) {
-            // Navigate back to dashboard
-            loadFragment(new DoctorDashboardFragment());
-            toolbar.setTitle("Doctor Dashboard");
-            updateNavigationSelection(R.id.nav_doctor_dashboard);
-        } else {
-            // On dashboard, exit app or handle normally
-            super.onBackPressed();
-        }
+        newPatientsListener = firebaseRTDBHelper.listenForNewPatients(patient -> {
+            if (patient == null || patient.getPatientId() == null) {
+                return;
+            }
+            
+            boolean alreadyKnown;
+            synchronized (knownPatientIds) {
+                alreadyKnown = !knownPatientIds.add(patient.getPatientId());
+            }
+            if (alreadyKnown) {
+                return;
+            }
+            
+            String patientName = patient.getFullName() != null && !patient.getFullName().isEmpty()
+                    ? patient.getFullName()
+                    : (patient.getFirstName() + " " + patient.getLastName()).trim();
+            
+            Notification notification = new Notification(
+                    patient.getPatientId(),
+                    "Patient Registration",
+                    "New patient registered: " + patientName,
+                    patient.getCreatedDate() != null ? formatTimestamp(patient.getCreatedDate()) : "Recently"
+            );
+            
+            runOnUiThread(() -> {
+                if (notificationDropdownHelper != null) {
+                    notificationDropdownHelper.addNotification(notification);
+                    updateNotificationBadge(notificationDropdownHelper.getTotalNotificationCount());
+                } else {
+                    synchronized (knownPatientIds) {
+                        updateNotificationBadge(knownPatientIds.size());
+                    }
+                }
+            });
+        });
     }
 }
-
-

@@ -60,6 +60,9 @@ dependencies {
     // Add the dependencies for any other desired Firebase products
     // https://firebase.google.com/docs/android/setup#available-libraries
     
+    // MPAndroidChart for line graphs
+    implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
+    
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core

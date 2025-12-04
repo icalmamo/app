@@ -38,6 +38,14 @@
             android:name=".LoginActivity"
             android:exported="false"
             android:theme="@style/Theme.H_CAS.NoActionBar"
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Loading Activity - Shows splash screen before navigating to dashboard -->
+        <activity
+            android:name=".LoadingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.H_CAS.NoActionBar"
             android:screenOrientation="portrait" />
 
         <!-- Main Activity -->

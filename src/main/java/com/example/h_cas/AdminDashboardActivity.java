@@ -1,47 +1,41 @@
 package com.example.h_cas;
 
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Bundle;
-import android.view.MenuItem;
-import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
-
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import android.widget.Toast;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
+import com.example.h_cas.models.Notification;
+import com.example.h_cas.utils.NotificationDropdownHelper;
 
 import androidx.activity.EdgeToEdge;
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
-import androidx.core.view.GravityCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.appbar.MaterialToolbar;
-import com.google.android.material.navigation.NavigationView;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 /**
  * AdminDashboardActivity provides the main interface for healthcare administrators.
  * Features include employee management, system overview, and administrative controls.
  */
-public class AdminDashboardActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
+public class AdminDashboardActivity extends AppCompatActivity {
 
-    private DrawerLayout drawerLayout;
-    private NavigationView navigationView;
+    private BottomNavigationView bottomNavigationView;
     private MaterialToolbar toolbar;
     private TextView welcomeTextView;
+    private ImageView notificationButton;
+    private ImageView logoutButton;
+    private TextView notificationBadge;
+    private NotificationDropdownHelper notificationDropdownHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -58,108 +52,174 @@ public class AdminDashboardActivity extends AppCompatActivity implements Navigat
 
         initializeViews();
         setupToolbar();
-        setupNavigationDrawer();
-        setupNavigationHeader();
+        setupBottomNavigation();
+        setupNotificationButton();
+        setupLogoutButton();
         
         // Load default dashboard fragment
         loadFragment(new AdminDashboardFragment());
+        toolbar.setTitle("Admin Dashboard");
     }
 
     /**
      * Initialize all view references from the layout
      */
     private void initializeViews() {
-        drawerLayout = findViewById(R.id.drawerLayout);
-        navigationView = findViewById(R.id.navigationView);
+        bottomNavigationView = findViewById(R.id.bottomNavigationView);
         toolbar = findViewById(R.id.toolbar);
         welcomeTextView = findViewById(R.id.welcomeTextView);
+        notificationButton = findViewById(R.id.notificationButton);
+        notificationBadge = findViewById(R.id.notificationBadge);
+        logoutButton = findViewById(R.id.logoutButton);
     }
 
     /**
-     * Setup the toolbar with navigation toggle
+     * Setup the toolbar
      */
     private void setupToolbar() {
         setSupportActionBar(toolbar);
-        
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawerLayout, toolbar, 
-                R.string.navigation_drawer_open, 
-                R.string.navigation_drawer_close
-        );
-        drawerLayout.addDrawerListener(toggle);
-        toggle.syncState();
     }
 
     /**
-     * Setup the navigation drawer
+     * Setup the bottom navigation bar
      */
-    private void setupNavigationDrawer() {
-        navigationView.setNavigationItemSelectedListener(this);
-        
-        // Always keep Dashboard highlighted by default
-        navigationView.setCheckedItem(R.id.nav_dashboard);
-    }
-
-    /**
-     * Setup the navigation header with admin info
-     */
-    private void setupNavigationHeader() {
-        View headerView = navigationView.getHeaderView(0);
-        TextView adminNameTextView = headerView.findViewById(R.id.adminNameTextView);
-        TextView adminRoleTextView = headerView.findViewById(R.id.adminRoleTextView);
-        ImageView adminAvatarImageView = headerView.findViewById(R.id.adminAvatarImageView);
-        
-        // Load admin data from database
-        HCasDatabaseHelper databaseHelper = new HCasDatabaseHelper(this);
-        Employee admin = databaseHelper.getEmployeeByUsername("admin");
-        
-        if (admin != null) {
-            adminNameTextView.setText(admin.getFullName());
-            adminRoleTextView.setText(admin.getRole());
+    private void setupBottomNavigation() {
+        bottomNavigationView.setOnItemSelectedListener(item -> {
+            int itemId = item.getItemId();
             
-            // Load profile picture if available
-            if (admin.getProfilePictureUrl() != null && !admin.getProfilePictureUrl().isEmpty()) {
-                loadProfilePicture(adminAvatarImageView, admin.getProfilePictureUrl());
+            if (itemId == R.id.nav_dashboard) {
+                loadFragment(new AdminDashboardFragment());
+                toolbar.setTitle("Admin Dashboard");
+                return true;
+            } else if (itemId == R.id.nav_create_employee) {
+                loadFragment(new CreateEmployeeFragment());
+                toolbar.setTitle("Create Employee");
+                return true;
+            } else if (itemId == R.id.nav_manage_employees) {
+                loadFragment(new ManageEmployeesFragment());
+                toolbar.setTitle("Manage Employees");
+                return true;
+            } else if (itemId == R.id.nav_reports) {
+                loadFragment(new ReportsFragment());
+                toolbar.setTitle("Reports & Analytics");
+                return true;
+            } else if (itemId == R.id.nav_settings) {
+                loadFragment(new AdminSettingsFragment());
+                toolbar.setTitle("Settings");
+                return true;
             }
-        } else {
-            adminNameTextView.setText("Healthcare Admin");
-            adminRoleTextView.setText("System Administrator");
-        }
+            
+            return false;
+        });
         
-        // Make header clickable to open profile
-        View profileSection = headerView.findViewById(R.id.profileSection);
-        if (profileSection != null) {
-            profileSection.setOnClickListener(v -> {
-                loadFragment(new AdminProfileFragment());
-                toolbar.setTitle("My Profile");
-                drawerLayout.closeDrawer(GravityCompat.START);
+        // Set default selected item
+        bottomNavigationView.setSelectedItemId(R.id.nav_dashboard);
+    }
+
+    /**
+     * Setup notification button click handler
+     */
+    private void setupNotificationButton() {
+        if (notificationButton != null) {
+            notificationDropdownHelper = new NotificationDropdownHelper(this);
+            // Set listener to update badge when notifications change
+            notificationDropdownHelper.setNotificationCountListener(count -> {
+                updateNotificationBadge(count);
+            });
+            loadNotifications();
+            notificationButton.setOnClickListener(v -> {
+                notificationDropdownHelper.toggle(notificationButton);
             });
         }
     }
+
+    /**
+     * Setup logout button click handler
+     */
+    private void setupLogoutButton() {
+        if (logoutButton != null) {
+            logoutButton.setOnClickListener(v -> {
+                handleLogout();
+            });
+        }
+    }
+
+    /**
+     * Handle user logout with confirmation dialog
+     */
+    private void handleLogout() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Logout");
+        builder.setMessage("Are you sure you want to log out?");
+        builder.setPositiveButton("Yes, Logout", (dialog, which) -> {
+            Intent intent = new Intent(AdminDashboardActivity.this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+    
+    @Override
+    public void onBackPressed() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Exit");
+        builder.setMessage("Are you sure you want to exit?");
+        builder.setPositiveButton("Yes, Exit", (dialog, which) -> {
+            finish();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            dialog.dismiss();
+        });
+        builder.show();
+    }
+
+    private void loadNotifications() {
+        java.util.List<Notification> notifications = new java.util.ArrayList<>();
+        Notification notif1 = new Notification("1", "System", 
+            "New employee registration pending approval", "2:15 pm November 17");
+        Notification notif2 = new Notification("2", "System", 
+            "Weekly report generated successfully", "10:00 am November 17");
+        notifications.add(notif1);
+        notifications.add(notif2);
+        if (notificationDropdownHelper != null) {
+            notificationDropdownHelper.setNotifications(notifications);
+        }
+        updateNotificationBadge(notifications.size());
+    }
     
     /**
-     * Load profile picture from URL
+     * Update notification badge counter
      */
-    private void loadProfilePicture(ImageView imageView, String imageUrl) {
-        if (imageUrl != null && !imageUrl.isEmpty()) {
-            new Thread(() -> {
-                try {
-                    URL url = new URL(imageUrl);
-                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    connection.setDoInput(true);
-                    connection.connect();
-                    InputStream input = connection.getInputStream();
-                    Bitmap bitmap = BitmapFactory.decodeStream(input);
-                    
-                    runOnUiThread(() -> {
-                        if (bitmap != null) {
-                            imageView.setImageBitmap(bitmap);
-                        }
-                    });
-                } catch (Exception e) {
-                    // Keep default avatar on error
+    private void updateNotificationBadge(int count) {
+        if (notificationBadge != null) {
+            if (count > 0) {
+                notificationBadge.setVisibility(android.view.View.VISIBLE);
+                // Show count, but if > 99, show "99+"
+                if (count > 99) {
+                    notificationBadge.setText("99+");
+                    // Adjust size for longer text
+                    notificationBadge.getLayoutParams().width = (int) (24 * getResources().getDisplayMetrics().density);
+                } else {
+                    notificationBadge.setText(String.valueOf(count));
+                    notificationBadge.getLayoutParams().width = (int) (18 * getResources().getDisplayMetrics().density);
                 }
-            }).start();
+                notificationBadge.requestLayout();
+            } else {
+                notificationBadge.setVisibility(android.view.View.GONE);
+            }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (notificationDropdownHelper != null) {
+            notificationDropdownHelper.cleanup();
         }
     }
 
@@ -174,56 +234,6 @@ public class AdminDashboardActivity extends AppCompatActivity implements Navigat
         transaction.commit();
     }
 
-    @Override
-    public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-        int itemId = item.getItemId();
-        
-        if (itemId == R.id.nav_dashboard) {
-            loadFragment(new AdminDashboardFragment());
-            toolbar.setTitle("Admin Dashboard");
-        } else if (itemId == R.id.nav_create_employee) {
-            loadFragment(new CreateEmployeeFragment());
-            toolbar.setTitle("Create Employee");
-        } else if (itemId == R.id.nav_manage_employees) {
-            loadFragment(new ManageEmployeesFragment());
-            toolbar.setTitle("Manage Employees");
-        } else if (itemId == R.id.nav_reports) {
-            loadFragment(new ReportsFragment());
-            toolbar.setTitle("Reports & Analytics");
-        } else if (itemId == R.id.nav_settings) {
-            loadFragment(new AdminSettingsFragment());
-            toolbar.setTitle("Settings");
-        } else if (itemId == R.id.nav_logout) {
-            handleLogout();
-            return true; // Don't continue if logout
-        }
-        
-        // Always force Dashboard to remain highlighted after any menu selection
-        navigationView.setCheckedItem(R.id.nav_dashboard);
-        
-        drawerLayout.closeDrawer(GravityCompat.START);
-        return true;
-    }
-
-    /**
-     * Handle admin logout
-     */
-    private void handleLogout() {
-        // Clear any admin session data here
-        Intent intent = new Intent(this, LoginActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
-        finish();
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
-            drawerLayout.closeDrawer(GravityCompat.START);
-        } else {
-            super.onBackPressed();
-        }
-    }
 }
 
 

@@ -7,6 +7,30 @@
     <color name="primary_blue">#1976D2</color>
     <color name="primary_blue_dark">#1565C0</color>
     <color name="accent_blue">#2196F3</color>
+    
+    <!-- Doctor Theme - Light Blue + White -->
+    <color name="doctor_navy">#64B5F6</color>
+    <color name="doctor_navy_light">#90CAF9</color>
+    <color name="doctor_navy_dark">#42A5F5</color>
+    <color name="doctor_white_accent">#FFFFFF</color>
+    
+    <!-- Admin Theme - Light Purple + White -->
+    <color name="admin_deep_purple">#BA68C8</color>
+    <color name="admin_deep_purple_light">#CE93D8</color>
+    <color name="admin_deep_purple_dark">#AB47BC</color>
+    <color name="admin_white_accent">#FFFFFF</color>
+    
+    <!-- Nurse Theme - Light Teal + White -->
+    <color name="nurse_teal">#4DD0E1</color>
+    <color name="nurse_teal_light">#80DEEA</color>
+    <color name="nurse_teal_dark">#26C6DA</color>
+    <color name="nurse_white_accent">#FFFFFF</color>
+    
+    <!-- Pharmacist Theme - Light Green + White -->
+    <color name="pharmacist_green">#66BB6A</color>
+    <color name="pharmacist_green_light">#81C784</color>
+    <color name="pharmacist_green_dark">#4CAF50</color>
+    <color name="pharmacist_white_accent">#FFFFFF</color>
     <color name="text_primary">#212121</color>
     <color name="text_secondary">#757575</color>
     <color name="background_light">#FAFAFA</color>
@@ -30,4 +54,15 @@
     
     <!-- Info Card Background (10% opacity of primary blue) -->
     <color name="info_card_background">#1A1976D2</color>
+    
+    <!-- Bottom Navigation Colors (used in color selector) -->
+    <color name="bottom_nav_item_selected">#1976D2</color>
+    <color name="doctor_bottom_nav_selected">#000435</color>
+    
+    <!-- Notification Dropdown Colors -->
+    <color name="primary_blue_light">#E3F2FD</color>
+    <color name="grey_light">#F5F5F5</color>
+    <color name="grey_medium">#9E9E9E</color>
+    <color name="grey_dark">#616161</color>
+    <color name="divider_grey">#E0E0E0</color>
 </resources>

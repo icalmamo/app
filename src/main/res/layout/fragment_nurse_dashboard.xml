@@ -3,37 +3,42 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background_light"
-    android:fillViewport="true">
+    android:background="#F5F7FA"
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
-        <!-- Welcome Section -->
+        <!-- Welcome Section - Teal Theme -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardCornerRadius="12dp"
-            app:cardElevation="4dp">
+            android:layout_marginBottom="24dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp"
+            app:cardBackgroundColor="@color/nurse_teal">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="24dp"
+                android:background="@drawable/nurse_welcome_background">
 
                 <TextView
                     android:id="@+id/welcomeTextView"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Welcome to Nurse Dashboard"
-                    android:textSize="20sp"
+                    android:textSize="24sp"
                     android:textStyle="bold"
-                    android:textColor="@color/text_primary" />
+                    android:textColor="#1A1A1A"
+                    android:letterSpacing="0.02" />
 
                 <TextView
                     android:id="@+id/subtitleTextView"
@@ -41,97 +46,41 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="Patient registration, monitoring, and profile management"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary" />
+                    android:textSize="15sp"
+                    android:textColor="#1A1A1A"
+                    android:alpha="0.8" />
 
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
 
         <!-- Patient Management Stats Section -->
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:text="Patient Management Overview"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Patient Management Overview"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A1A"
+                android:letterSpacing="0.01" />
+
+        </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/statsRecyclerView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="28dp"
+            android:nestedScrollingEnabled="false" />
 
-        <!-- Quick Actions Section -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:text="Quick Actions"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/registrationButton"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="8dp"
-                android:text="Registration"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_patient_registration"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/primary_blue"
-                android:textColor="@color/white" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/monitoringButton"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="8dp"
-                android:text="Monitoring"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_patient_monitoring"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/success_green"
-                android:textColor="@color/white" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/profileButton"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="8dp"
-                android:text="Nurse Profile"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_nurse_profile"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/warning_orange"
-                android:textColor="@color/white" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/prescriptionsButton"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:layout_marginBottom="8dp"
-                android:text="Doctor's Prescriptions"
-                android:textSize="16sp"
-                app:icon="@drawable/ic_prescriptions"
-                app:iconGravity="textStart"
-                app:cornerRadius="8dp"
-                app:backgroundTint="@color/accent_blue"
-                android:textColor="@color/white" />
-
-        </LinearLayout>
 
     </LinearLayout>
 

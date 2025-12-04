@@ -1,6 +1,7 @@
 package com.example.h_cas;
 
 import android.app.AlertDialog;
+import android.nfc.Tag;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -20,13 +21,16 @@ import com.google.android.material.card.MaterialCardView;
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.RFIDData;
 import com.example.h_cas.models.Medicine;
+import com.example.h_cas.models.Patient;
+import com.example.h_cas.models.Prescription;
 
 /**
- * MedicationDispensingFragment handles RFID reading and medication dispensing for pharmacists
+ * MedicationDispensingFragment handles NFC reading and medication dispensing for pharmacists
  */
 public class MedicationDispensingFragment extends Fragment {
 
     private HCasDatabaseHelper databaseHelper;
+    private com.example.h_cas.utils.NFCHelper nfcHelper;
     private MaterialButton scanRFIDButton;
     private MaterialCardView prescriptionCard;
     private TextView emptyStateText;
@@ -38,6 +42,7 @@ public class MedicationDispensingFragment extends Fragment {
         
         initializeViews(view);
         initializeDatabase();
+        initializeNFC();
         setupClickListeners();
         
         return view;
@@ -48,6 +53,11 @@ public class MedicationDispensingFragment extends Fragment {
         prescriptionCard = view.findViewById(R.id.prescriptionCard);
         emptyStateText = view.findViewById(R.id.emptyStateText);
         
+        // Update button text to reflect NFC
+        if (scanRFIDButton != null) {
+            scanRFIDButton.setText("Scan NFC Tag");
+        }
+        
         // Initially hide prescription card
         prescriptionCard.setVisibility(View.GONE);
         emptyStateText.setVisibility(View.VISIBLE);
@@ -56,45 +66,180 @@ public class MedicationDispensingFragment extends Fragment {
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
     }
+    
+    /**
+     * Initialize NFC helper
+     */
+    private void initializeNFC() {
+        nfcHelper = new com.example.h_cas.utils.NFCHelper(getContext());
+        
+        // Set up NFC scan listener
+        nfcHelper.setNFCScanListener(new com.example.h_cas.utils.NFCHelper.NFCScanListener() {
+            @Override
+            public void onNFCTagDetected(String nfcUid, Tag tag) {
+                handleNFCTagDetected(nfcUid, tag);
+            }
+            
+            @Override
+            public void onNFCWriteSuccess(String nfcUid) {
+                // Not used for reading
+            }
+            
+            @Override
+            public void onNFCWriteError(String error) {
+                // Not used for reading
+            }
+            
+            @Override
+            public void onNFCReadSuccess(String nfcUid, String data) {
+                // Not used for reading
+            }
+            
+            @Override
+            public void onNFCReadError(String error) {
+                Toast.makeText(getContext(), "Error reading NFC tag: " + error, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
 
     private void setupClickListeners() {
-        scanRFIDButton.setOnClickListener(v -> scanRFIDTag());
+        scanRFIDButton.setOnClickListener(v -> scanNFCTag());
     }
 
-    private void scanRFIDTag() {
-        // Show RFID scanning dialog
+    private void scanNFCTag() {
+        // Check NFC availability
+        if (nfcHelper == null) {
+            initializeNFC();
+        }
+        
+        if (!nfcHelper.isNFCAvailable()) {
+            Toast.makeText(getContext(), "NFC is not available on this device", Toast.LENGTH_LONG).show();
+            return;
+        }
+        
+        if (!nfcHelper.isNFCEnabled()) {
+            Toast.makeText(getContext(), "NFC is disabled. Please enable NFC in settings", Toast.LENGTH_LONG).show();
+            return;
+        }
+        
+        // Show NFC scanning dialog
         AlertDialog.Builder scanBuilder = new AlertDialog.Builder(getContext());
-        scanBuilder.setTitle("Scan RFID Tag");
-        scanBuilder.setMessage("Please scan the patient's RFID tag to read prescription data.");
-        
-        scanBuilder.setPositiveButton("Simulate Scan", (dialog, which) -> {
-            // For demo purposes, simulate scanning an RFID tag
-            // In real implementation, this would read from actual RFID reader
-            simulateRFIDScan();
-        });
-        
+        scanBuilder.setTitle("Scan NFC Tag");
+        scanBuilder.setMessage("Please hold the patient's NFC tag near your device.\n\nThe tag will be automatically detected.");
+        scanBuilder.setCancelable(true);
         scanBuilder.setNegativeButton("Cancel", (dialog, which) -> {
-            // Do nothing, just close dialog
+            dialog.dismiss();
         });
         
-        scanBuilder.show();
-    }
-
-    private void simulateRFIDScan() {
-        // Simulate scanning an RFID tag (in real implementation, this would come from RFID reader)
-        String simulatedRFIDTagId = "RFID1759590975147"; // Use a realistic RFID tag ID
+        AlertDialog scanDialog = scanBuilder.create();
+        scanDialog.show();
         
-        // Read prescription data from RFID
-        RFIDData rfidData = databaseHelper.readPrescriptionFromRFID(simulatedRFIDTagId);
-        
-        if (rfidData != null) {
-            showPrescriptionData(rfidData);
-        } else {
-            Toast.makeText(getContext(), "❌ No prescription found for this RFID tag or already dispensed.", Toast.LENGTH_LONG).show();
+        // Enable NFC foreground dispatch
+        if (getActivity() != null) {
+            nfcHelper.enableForegroundDispatch(getActivity());
         }
     }
-
-    private void showPrescriptionData(RFIDData rfidData) {
+    
+    /**
+     * Handle NFC tag detection
+     */
+    private void handleNFCTagDetected(String nfcUid, Tag tag) {
+        if (nfcUid == null || nfcUid.isEmpty()) {
+            Toast.makeText(getContext(), "Invalid NFC tag detected", Toast.LENGTH_LONG).show();
+            return;
+        }
+        
+        // Try reading encoded prescription data directly from the NFC tag (if available)
+        if (tag != null) {
+            String payload = nfcHelper.readNFCTag(tag);
+            if (payload != null && !payload.isEmpty()) {
+                java.util.Map<String, String> payloadData = parseNfcPayload(payload);
+                Prescription payloadPrescription = null;
+                Patient payloadPatient = null;
+                
+                if (payloadData.containsKey("PRESCRIPTION_ID")) {
+                    payloadPrescription = databaseHelper.getPrescriptionById(payloadData.get("PRESCRIPTION_ID"));
+                }
+                
+                String payloadPatientId = payloadData.get("PATIENT_ID");
+                if (payloadPatientId != null) {
+                    payloadPatient = databaseHelper.getPatientById(payloadPatientId);
+                }
+                
+                if (payloadPrescription != null && payloadPatient == null) {
+                    payloadPatient = databaseHelper.getPatientById(payloadPrescription.getPatientId());
+                }
+                
+                if (payloadPrescription != null && payloadPatient != null) {
+                    showPrescriptionForDispensing(payloadPrescription, payloadPatient);
+                    if (getActivity() != null) {
+                        nfcHelper.disableForegroundDispatch(getActivity());
+                    }
+                    return;
+                }
+            }
+        }
+        
+        // Get patient by NFC UID
+        Patient patient = databaseHelper.getPatientByNfcUid(nfcUid);
+        
+        if (patient == null) {
+            Toast.makeText(getContext(), "❌ No patient found for this NFC tag.", Toast.LENGTH_LONG).show();
+            // Disable NFC foreground dispatch
+            if (getActivity() != null) {
+                nfcHelper.disableForegroundDispatch(getActivity());
+            }
+            return;
+        }
+        
+        // Get patient's active prescriptions
+        java.util.List<Prescription> prescriptions = databaseHelper.getPrescriptionsByPatientId(patient.getPatientId());
+        
+        if (prescriptions == null || prescriptions.isEmpty()) {
+            Toast.makeText(getContext(), "❌ No active prescriptions found for patient: " + patient.getFullName(), Toast.LENGTH_LONG).show();
+            // Disable NFC foreground dispatch
+            if (getActivity() != null) {
+                nfcHelper.disableForegroundDispatch(getActivity());
+            }
+            return;
+        }
+        
+        // Show prescription selection dialog if multiple prescriptions
+        if (prescriptions.size() == 1) {
+            showPrescriptionForDispensing(prescriptions.get(0), patient);
+        } else {
+            showPrescriptionSelectionDialog(prescriptions, patient);
+        }
+        
+        // Disable NFC foreground dispatch
+        if (getActivity() != null) {
+            nfcHelper.disableForegroundDispatch(getActivity());
+        }
+    }
+    
+    /**
+     * Show prescription selection dialog when multiple prescriptions exist
+     */
+    private void showPrescriptionSelectionDialog(java.util.List<Prescription> prescriptions, Patient patient) {
+        String[] prescriptionItems = new String[prescriptions.size()];
+        for (int i = 0; i < prescriptions.size(); i++) {
+            Prescription p = prescriptions.get(i);
+            prescriptionItems[i] = p.getMedication() + " - " + p.getDosage() + " (" + p.getCreatedDate() + ")";
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+        builder.setTitle("Select Prescription for " + patient.getFullName());
+        builder.setItems(prescriptionItems, (dialog, which) -> {
+            showPrescriptionForDispensing(prescriptions.get(which), patient);
+        });
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
+    }
+    
+    /**
+     * Show prescription data for dispensing
+     */
+    private void showPrescriptionForDispensing(Prescription prescription, Patient patient) {
         // Show prescription details
         AlertDialog.Builder prescriptionBuilder = new AlertDialog.Builder(getContext());
         prescriptionBuilder.setTitle("Prescription Found");
@@ -113,13 +258,13 @@ public class MedicationDispensingFragment extends Fragment {
         TextView dialogInstructions = dialogView.findViewById(R.id.dialogInstructions);
         
         // Populate prescription data
-        dialogPatientName.setText("Patient: " + rfidData.getPatientName());
-        dialogMedicine.setText("Medicine: " + rfidData.getMedicineName());
-        dialogDosage.setText("Dosage: " + rfidData.getDosage());
-        dialogFrequency.setText("Frequency: " + rfidData.getFrequency());
-        dialogDuration.setText("Duration: " + rfidData.getDuration());
-        dialogDoctor.setText("Doctor: " + rfidData.getDoctorName());
-        dialogInstructions.setText("Instructions: " + (rfidData.getInstructions() != null && !rfidData.getInstructions().isEmpty() ? rfidData.getInstructions() : "None"));
+        dialogPatientName.setText("Patient: " + patient.getFullName());
+        dialogMedicine.setText("Medicine: " + prescription.getMedication());
+        dialogDosage.setText("Dosage: " + prescription.getDosage());
+        dialogFrequency.setText("Frequency: " + prescription.getFrequency());
+        dialogDuration.setText("Duration: " + prescription.getDuration());
+        dialogDoctor.setText("Doctor: " + prescription.getDoctorName());
+        dialogInstructions.setText("Instructions: " + (prescription.getInstructions() != null && !prescription.getInstructions().isEmpty() ? prescription.getInstructions() : "None"));
         
         // Set up buttons
         MaterialButton dispenseButton = dialogView.findViewById(R.id.dispenseButton);
@@ -129,7 +274,7 @@ public class MedicationDispensingFragment extends Fragment {
         
         // Dispense medication button
         dispenseButton.setOnClickListener(v -> {
-            dispenseMedication(rfidData);
+            dispenseMedication(prescription, patient);
             dialog.dismiss();
         });
         
@@ -138,41 +283,45 @@ public class MedicationDispensingFragment extends Fragment {
         
         dialog.show();
     }
+    
 
-    private void dispenseMedication(RFIDData rfidData) {
+    /**
+     * Dispense medication for prescription
+     */
+    private void dispenseMedication(Prescription prescription, Patient patient) {
         // Check if medicine is available in stock
-        Medicine medicine = databaseHelper.getMedicineByName(rfidData.getMedicineName());
+        Medicine medicine = databaseHelper.getMedicineByName(prescription.getMedication());
         
         if (medicine == null) {
-            Toast.makeText(getContext(), "❌ Medicine not found in inventory: " + rfidData.getMedicineName(), Toast.LENGTH_LONG).show();
+            Toast.makeText(getContext(), "❌ Medicine not found in inventory: " + prescription.getMedication(), Toast.LENGTH_LONG).show();
             return;
         }
         
         if (!medicine.isInStock()) {
-            Toast.makeText(getContext(), "❌ Medicine out of stock: " + rfidData.getMedicineName(), Toast.LENGTH_LONG).show();
+            Toast.makeText(getContext(), "❌ Medicine out of stock: " + prescription.getMedication(), Toast.LENGTH_LONG).show();
             return;
         }
         
         // Show dispensing confirmation
         AlertDialog.Builder dispenseBuilder = new AlertDialog.Builder(getContext());
         dispenseBuilder.setTitle("Dispense Medication");
-        dispenseBuilder.setMessage("Dispense " + rfidData.getMedicineName() + " to " + rfidData.getPatientName() + "?\n\n" +
+        dispenseBuilder.setMessage("Dispense " + prescription.getMedication() + " to " + patient.getFullName() + "?\n\n" +
                                  "Current Stock: " + medicine.getStockQuantity() + " " + medicine.getUnit());
         
         dispenseBuilder.setPositiveButton("Dispense", (dialog, which) -> {
             // Deduct from stock (assuming 1 unit per prescription)
             int newStock = medicine.getStockQuantity() - 1;
-            boolean stockUpdated = databaseHelper.updateMedicineStock(rfidData.getMedicineName(), newStock);
+            boolean stockUpdated = databaseHelper.updateMedicineStock(prescription.getMedication(), newStock);
             
             if (stockUpdated) {
-                // Mark prescription as dispensed
-                String pharmacistName = "Pharmacist"; // In real implementation, get from logged-in user
-                boolean dispensed = databaseHelper.markPrescriptionAsDispensed(rfidData.getRfidTagId(), pharmacistName);
+                // Update prescription status to dispensed
+                prescription.setStatus("Dispensed");
+                boolean updated = databaseHelper.updatePrescription(prescription);
                 
-                if (dispensed) {
+                if (updated) {
                     Toast.makeText(getContext(), "✅ Medication dispensed successfully!\nStock remaining: " + newStock + " " + medicine.getUnit(), Toast.LENGTH_LONG).show();
                 } else {
-                    Toast.makeText(getContext(), "❌ Failed to mark prescription as dispensed.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(getContext(), "❌ Failed to update prescription status.", Toast.LENGTH_LONG).show();
                 }
             } else {
                 Toast.makeText(getContext(), "❌ Failed to update medicine stock.", Toast.LENGTH_LONG).show();
@@ -189,7 +338,46 @@ public class MedicationDispensingFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        // Refresh data when returning to this fragment
+        // Enable NFC foreground dispatch when fragment is visible
+        if (nfcHelper != null && getActivity() != null) {
+            nfcHelper.enableForegroundDispatch(getActivity());
+        }
+    }
+    
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Disable NFC foreground dispatch when fragment is not visible
+        if (nfcHelper != null && getActivity() != null) {
+            nfcHelper.disableForegroundDispatch(getActivity());
+        }
+    }
+    
+    /**
+     * Handle NFC intent from activity
+     */
+    public void handleNFCIntent(android.content.Intent intent) {
+        if (nfcHelper != null) {
+            nfcHelper.handleNFCIntent(intent);
+        }
+    }
+    
+    /**
+     * Parse the NFC payload written by nurses to extract prescription metadata.
+     */
+    private java.util.Map<String, String> parseNfcPayload(String payload) {
+        java.util.Map<String, String> dataMap = new java.util.HashMap<>();
+        if (payload == null || payload.isEmpty()) {
+            return dataMap;
+        }
+        String[] pairs = payload.split(";");
+        for (String pair : pairs) {
+            String[] keyValue = pair.split("=", 2);
+            if (keyValue.length == 2) {
+                dataMap.put(keyValue[0], keyValue[1]);
+            }
+        }
+        return dataMap;
     }
 
     @Override
