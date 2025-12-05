@@ -58,7 +58,7 @@
                     android:layout_height="80dp"
                     android:src="@drawable/ic_rfid_scanner"
                     android:layout_marginBottom="16dp"
-                    android:tint="@color/primary_blue" />
+                    android:tint="@color/success_green" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -89,7 +89,7 @@
                     app:iconGravity="textStart"
                     app:iconSize="24dp"
                     app:cornerRadius="12dp"
-                    app:backgroundTint="@color/primary_blue"
+                    app:backgroundTint="@color/success_green"
                     android:textColor="@color/white" />
 
             </LinearLayout>
@@ -132,17 +132,6 @@
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
-
-        <!-- Empty State -->
-        <TextView
-            android:id="@+id/emptyStateText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="No RFID tag scanned yet"
-            android:textSize="16sp"
-            android:textColor="@color/text_secondary"
-            android:layout_gravity="center"
-            android:layout_marginTop="40dp" />
 
     </LinearLayout>
 

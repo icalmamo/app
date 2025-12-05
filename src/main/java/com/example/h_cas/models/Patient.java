@@ -42,6 +42,7 @@ public class Patient {
     // System Information
     private String createdDate;
     private String nfcUid; // NFC UID for patient identification
+    private String patientStatus; // "on" = active/available for prescription, "off" = has prescription (soft delete)
 
     public String getPatientId() {
         return patientId;
@@ -258,6 +259,14 @@ public class Patient {
 
     public void setNfcUid(String nfcUid) {
         this.nfcUid = nfcUid;
+    }
+
+    public String getPatientStatus() {
+        return patientStatus;
+    }
+
+    public void setPatientStatus(String patientStatus) {
+        this.patientStatus = patientStatus;
     }
 }
 

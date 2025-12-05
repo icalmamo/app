@@ -1,45 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    
-    <!-- Background -->
-    <path
-        android:fillColor="#1976D2"
-        android:pathData="M0,0h108v108h-108z" />
-    
-    <!-- Medical Cross Icon -->
-    <group
-        android:translateX="54"
-        android:translateY="54">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M-15,-10 L-15,5 L-30,5 L-30,10 L-15,10 L-15,25 L-10,25 L-10,10 L5,10 L5,5 L-10,5 L-10,-10 Z" />
-        
-        <!-- Heart Symbol -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M0,15 C-2,13 -5,10 -8,10 C-12,10 -15,13 -15,17 C-15,21 -10,27 0,35 C10,27 15,21 15,17 C15,13 12,10 8,10 C5,10 2,13 0,15 Z" />
-    </group>
-    
-    <!-- HCAS Text -->
-    <group
-        android:translateX="54"
-        android:translateY="75">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M-25,-3 L-25,4 L-30,4 L-30,-3 L-30,-9 L-25,-9 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M-18,-9 L-13,-9 L-13,4 L-18,4 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M-6,-9 L-6,4 L-11,4 L-11,-9 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M1,-9 L6,-9 L6,4 L1,4 Z" />
-    </group>
-    
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <inset
+            android:drawable="@drawable/hcas_logo"
+            android:insetLeft="-5%"
+            android:insetTop="20%"
+            android:insetRight="-5%"
+            android:insetBottom="20%" />
+    </item>
+</layer-list>

@@ -346,13 +346,13 @@ public class PharmacistDashboardActivity extends AppCompatActivity {
                 loadFragment(new MedicationDispensingFragment());
                 toolbar.setTitle("Medication Dispensing");
                 return true;
+            } else if (itemId == R.id.nav_dispensed_history) {
+                loadFragment(new DispensedHistoryFragment());
+                toolbar.setTitle("Dispensed History");
+                return true;
             } else if (itemId == R.id.nav_inventory) {
                 loadFragment(new NewEnhancedInventoryFragment());
                 toolbar.setTitle("Inventory");
-                return true;
-            } else if (itemId == R.id.nav_prescription_verification) {
-                loadFragment(new PrescriptionVerificationFragment());
-                toolbar.setTitle("Prescription Verification");
                 return true;
             } else if (itemId == R.id.nav_pharmacist_settings) {
                 loadFragment(new PharmacistSettingsFragment());

@@ -196,36 +196,6 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Verify Prescription Button -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="2dp"
-                app:strokeWidth="0dp"
-                app:cardBackgroundColor="@color/white">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/verificationButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="64dp"
-                    android:text="Verify Prescription"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/white"
-                    android:letterSpacing="0.01"
-                    app:icon="@drawable/ic_prescription_verification"
-                    app:iconGravity="textStart"
-                    app:iconTint="@color/white"
-                    app:cornerRadius="14dp"
-                    app:backgroundTint="@color/pharmacist_green"
-                    app:elevation="0dp"
-                    android:paddingStart="20dp"
-                    android:paddingEnd="20dp" />
-
-            </com.google.android.material.card.MaterialCardView>
-
             <!-- Profile Button -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"

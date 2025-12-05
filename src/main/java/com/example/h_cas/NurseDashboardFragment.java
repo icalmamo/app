@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -16,6 +17,9 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
+import com.example.h_cas.models.Patient;
+import java.util.List;
 
 /**
  * NurseDashboardFragment displays the main dashboard for nurses
@@ -28,6 +32,7 @@ public class NurseDashboardFragment extends Fragment {
     private TextView subtitleTextView;
     
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
 
     @Nullable
     @Override
@@ -71,23 +76,15 @@ public class NurseDashboardFragment extends Fragment {
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(getContext());
+        firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
 
     private void setupStatsRecyclerView() {
-        // Get real data from database
-        int totalPatients = databaseHelper.getTotalPatientsCount();
-        int monitoringCount = getMonitoringCount(); // Patients being monitored
-        int prescriptionCount = getPrescriptionCount(); // Doctor prescriptions
-
-        // Create healthcare system stats data with real values (removed Registration as it's same as Total Patients)
+        // Show loading state with empty values (will show loading icon)
         String[] statsLabels = {"Total Patients", "Monitoring", "Doctor's Prescription"};
-        String[] statsValues = {
-            String.valueOf(totalPatients),
-            String.valueOf(monitoringCount),
-            String.valueOf(prescriptionCount)
-        };
+        String[] statsValues = {"", "", ""}; // Empty values will trigger loading state
         int[] statsColors = {R.color.nurse_teal, R.color.nurse_teal, R.color.nurse_teal};
-
+        
         StatsAdapter adapter = new StatsAdapter(statsLabels, statsValues, statsColors, (position, label) -> {
             if ("Doctor's Prescription".equals(label)) {
                 // Navigate to ViewPrescriptionsFragment
@@ -104,25 +101,69 @@ public class NurseDashboardFragment extends Fragment {
         });
         statsRecyclerView.setLayoutManager(new GridLayoutManager(getContext(), 2));
         statsRecyclerView.setAdapter(adapter);
+        
+        // Fetch accurate data from Firebase RTDB
+        loadStatisticsFromFirebase(adapter);
     }
-
-
+    
     /**
-     * Get count of patients being monitored
+     * Load statistics from Firebase RTDB (source of truth)
      */
-    private int getMonitoringCount() {
-        // For now, return a calculated value based on total patients
-        // In a real system, this would query patients with monitoring status
+    private void loadStatisticsFromFirebase(StatsAdapter adapter) {
+        if (firebaseRTDBHelper == null) {
+            android.util.Log.w("NurseDashboard", "⚠️ FirebaseRTDBHelper is null, using SQLite fallback");
+            loadStatisticsFromSQLite(adapter);
+            return;
+        }
+        
+        // Fetch patients from Firebase
+        firebaseRTDBHelper.getAllPatients(patients -> {
+            int totalPatients = patients != null ? patients.size() : 0;
+            int monitoringCount = totalPatients; // All patients are being monitored
+            
+            // Fetch prescriptions from Firebase (both from prescriptions and history paths)
+            firebaseRTDBHelper.getAllPrescriptions(prescriptions -> {
+                int prescriptionCount = prescriptions != null ? prescriptions.size() : 0;
+                
+                // Update UI on main thread
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        String[] statsLabels = {"Total Patients", "Monitoring", "Doctor's Prescription"};
+                        String[] statsValues = {
+                            String.valueOf(totalPatients),
+                            String.valueOf(monitoringCount),
+                            String.valueOf(prescriptionCount)
+                        };
+                        
+                        // Update adapter with accurate values
+                        adapter.updateValues(statsValues);
+                        
+                        android.util.Log.d("NurseDashboard", "📊 Statistics updated from Firebase:");
+                        android.util.Log.d("NurseDashboard", "   Total Patients: " + totalPatients);
+                        android.util.Log.d("NurseDashboard", "   Monitoring: " + monitoringCount);
+                        android.util.Log.d("NurseDashboard", "   Prescriptions: " + prescriptionCount);
+                    });
+                }
+            });
+        });
+    }
+    
+    /**
+     * Fallback: Load statistics from SQLite if Firebase is not available
+     */
+    private void loadStatisticsFromSQLite(StatsAdapter adapter) {
         int totalPatients = databaseHelper.getTotalPatientsCount();
-        return Math.max(1, totalPatients / 2); // Approximately 1/2 of patients being monitored
-    }
-
-    /**
-     * Get count of doctor prescriptions
-     */
-    private int getPrescriptionCount() {
-        // Query actual prescription count from database
-        return databaseHelper.getPrescriptionsCount();
+        int monitoringCount = totalPatients; // All patients are being monitored
+        int prescriptionCount = databaseHelper.getPrescriptionsCount();
+        
+        String[] statsLabels = {"Total Patients", "Monitoring", "Doctor's Prescription"};
+        String[] statsValues = {
+            String.valueOf(totalPatients),
+            String.valueOf(monitoringCount),
+            String.valueOf(prescriptionCount)
+        };
+        
+        adapter.updateValues(statsValues);
     }
 
     // Interface for item click listener
@@ -154,11 +195,25 @@ public class NurseDashboardFragment extends Fragment {
         @Override
         public void onBindViewHolder(@NonNull StatsViewHolder holder, int position) {
             holder.labelText.setText(labels[position]);
-            holder.valueText.setText(values[position]);
+            
+            // Check if loading (empty value)
+            boolean isLoading = values[position] == null || values[position].isEmpty() || values[position].equals("Loading...");
+            
+            if (isLoading) {
+                // Show loading indicator, hide value text
+                holder.valueText.setVisibility(View.GONE);
+                holder.loadingIndicator.setVisibility(View.VISIBLE);
+            } else {
+                // Show value, hide loading indicator
+                holder.valueText.setText(values[position]);
+                holder.valueText.setVisibility(View.VISIBLE);
+                holder.loadingIndicator.setVisibility(View.GONE);
+            }
+            
             holder.cardView.setCardBackgroundColor(getContext().getColor(colors[position]));
 
-            // Set click listener
-            holder.cardView.setOnClickListener(v -> {
+            // Set click listener (disable during loading)
+            holder.cardView.setOnClickListener(isLoading ? null : v -> {
                 if (listener != null) {
                     listener.onItemClick(position, labels[position]);
                 }
@@ -169,17 +224,29 @@ public class NurseDashboardFragment extends Fragment {
         public int getItemCount() {
             return labels.length;
         }
+        
+        /**
+         * Update the values displayed in the stats cards
+         */
+        public void updateValues(String[] newValues) {
+            if (newValues != null && newValues.length == values.length) {
+                this.values = newValues;
+                notifyDataSetChanged();
+            }
+        }
 
         class StatsViewHolder extends RecyclerView.ViewHolder {
             MaterialCardView cardView;
             TextView labelText;
             TextView valueText;
+            ProgressBar loadingIndicator;
 
             public StatsViewHolder(@NonNull View itemView) {
                 super(itemView);
                 cardView = itemView.findViewById(R.id.statCardView);
                 labelText = itemView.findViewById(R.id.statLabelText);
                 valueText = itemView.findViewById(R.id.statValueText);
+                loadingIndicator = itemView.findViewById(R.id.statLoadingIndicator);
             }
         }
     }

@@ -32,7 +32,6 @@ public class PharmacistDashboardFragment extends Fragment {
     private MaterialButton inventoryButton;
     private MaterialButton dispensingButton;
     private MaterialButton interactionsButton;
-    private MaterialButton verificationButton;
     private MaterialButton profileButton;
     private MaterialButton reportsButton;
     
@@ -59,7 +58,6 @@ public class PharmacistDashboardFragment extends Fragment {
         inventoryButton = view.findViewById(R.id.inventoryButton);
         dispensingButton = view.findViewById(R.id.dispensingButton);
         interactionsButton = view.findViewById(R.id.interactionsButton);
-        verificationButton = view.findViewById(R.id.verificationButton);
         profileButton = view.findViewById(R.id.profileButton);
         reportsButton = view.findViewById(R.id.reportsButton);
     }
@@ -112,7 +110,6 @@ public class PharmacistDashboardFragment extends Fragment {
         inventoryButton.setOnClickListener(v -> navigateToInventory());
         dispensingButton.setOnClickListener(v -> navigateToDispensing());
         interactionsButton.setOnClickListener(v -> navigateToDisposedMedicine());
-        verificationButton.setOnClickListener(v -> navigateToVerification());
         profileButton.setOnClickListener(v -> navigateToProfile());
         reportsButton.setOnClickListener(v -> navigateToReports());
     }
@@ -133,12 +130,6 @@ public class PharmacistDashboardFragment extends Fragment {
     private void navigateToDisposedMedicine() {
         if (getActivity() instanceof PharmacistDashboardActivity) {
             ((PharmacistDashboardActivity) getActivity()).loadFragment(new DisposedMedicineFragment());
-        }
-    }
-
-    private void navigateToVerification() {
-        if (getActivity() instanceof PharmacistDashboardActivity) {
-            ((PharmacistDashboardActivity) getActivity()).loadFragment(new PrescriptionVerificationFragment());
         }
     }
 

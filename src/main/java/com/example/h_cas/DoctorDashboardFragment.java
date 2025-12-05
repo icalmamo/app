@@ -37,8 +37,6 @@ public class DoctorDashboardFragment extends Fragment {
     private TextView welcomeTextView;
     private HCasDatabaseHelper databaseHelper;
     private FirebaseRTDBHelper firebaseRTDBHelper;
-    private MaterialButton quickActionNewDiagnosis;
-    private MaterialButton quickActionWritePrescription;
 
     @Nullable
     @Override
@@ -48,7 +46,6 @@ public class DoctorDashboardFragment extends Fragment {
         initializeDatabase();
         initializeViews(view);
         setupLineChart();
-        setupQuickActionButtons(view);
         
         return view;
     }
@@ -73,8 +70,6 @@ public class DoctorDashboardFragment extends Fragment {
     private void initializeViews(View view) {
         medicalOverviewChart = view.findViewById(R.id.medicalOverviewChart);
         welcomeTextView = view.findViewById(R.id.welcomeTextView);
-        quickActionNewDiagnosis = view.findViewById(R.id.quickActionNewDiagnosis);
-        quickActionWritePrescription = view.findViewById(R.id.quickActionWritePrescription);
         
         // Get doctor name from activity if available
         if (getActivity() instanceof DoctorDashboardActivity) {
@@ -88,31 +83,6 @@ public class DoctorDashboardFragment extends Fragment {
         } else {
             welcomeTextView.setText("Welcome to Doctor Dashboard");
         }
-    }
-    
-    /**
-     * Setup quick action buttons with click listeners
-     */
-    private void setupQuickActionButtons(View view) {
-        // New Diagnosis - Navigate to Create Diagnosis
-        quickActionNewDiagnosis.setOnClickListener(v -> {
-            if (getActivity() instanceof DoctorDashboardActivity) {
-                DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
-                CreateDiagnosisFragment diagnosisFragment = new CreateDiagnosisFragment();
-                activity.loadFragment(diagnosisFragment);
-                activity.getSupportActionBar().setTitle("Create Diagnosis");
-            }
-        });
-        
-        // Write Prescription - Navigate to Create Prescription
-        quickActionWritePrescription.setOnClickListener(v -> {
-            if (getActivity() instanceof DoctorDashboardActivity) {
-                DoctorDashboardActivity activity = (DoctorDashboardActivity) getActivity();
-                CreatePrescriptionFragment prescriptionFragment = new CreatePrescriptionFragment();
-                activity.loadFragment(prescriptionFragment);
-                activity.getSupportActionBar().setTitle("Create Prescription");
-            }
-        });
     }
 
     private void setupLineChart() {

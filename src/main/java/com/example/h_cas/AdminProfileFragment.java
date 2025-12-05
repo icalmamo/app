@@ -28,9 +28,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
-import com.google.firebase.storage.FirebaseStorage;
-import com.google.firebase.storage.StorageReference;
-import com.google.firebase.storage.UploadTask;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
+import com.example.h_cas.utils.ImageUtils;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Employee;
@@ -74,8 +77,6 @@ public class AdminProfileFragment extends Fragment {
     
     // Profile Picture
     private Uri imageUri;
-    private FirebaseStorage storage;
-    private StorageReference storageReference;
     private ActivityResultLauncher<Intent> imagePickerLauncher;
 
     @Nullable
@@ -87,10 +88,6 @@ public class AdminProfileFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        
-        // Initialize Firebase Storage
-        storage = FirebaseStorage.getInstance();
-        storageReference = storage.getReference();
         
         // Initialize admin profile functionality
         initializeViews(view);
@@ -233,44 +230,101 @@ public class AdminProfileFragment extends Fragment {
     }
 
     /**
-     * Load profile picture from URL
+     * Load profile picture from base64 string or URL (backward compatibility)
      */
-    private void loadProfilePicture(String imageUrl) {
-        if (getContext() != null && imageUrl != null && !imageUrl.isEmpty()) {
-            try {
-                // Load image in background thread
-                new Thread(() -> {
-                    try {
-                        URL url = new URL(imageUrl);
-                        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                        connection.setDoInput(true);
-                        connection.connect();
-                        InputStream input = connection.getInputStream();
-                        Bitmap bitmap = BitmapFactory.decodeStream(input);
-                        
-                        // Update UI on main thread
-                        if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> {
-                                if (bitmap != null) {
-                                    profileImageView.setImageBitmap(bitmap);
-                                } else {
-                                    profileImageView.setImageResource(R.drawable.ic_admin_avatar);
-                                }
-                            });
-                        }
-                    } catch (Exception e) {
-                        // Fallback to default avatar on error
-                        if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> {
-                                profileImageView.setImageResource(R.drawable.ic_admin_avatar);
-                            });
-                        }
-                    }
-                }).start();
-            } catch (Exception e) {
+    private void loadProfilePicture(String imageData) {
+        if (imageData == null || imageData.isEmpty() || profileImageView == null) {
+            if (profileImageView != null) {
                 profileImageView.setImageResource(R.drawable.ic_admin_avatar);
             }
+            return;
+        }
+        
+        // Check if it's a base64 string
+        if (ImageUtils.isBase64Image(imageData)) {
+            loadProfilePictureFromBase64(imageData);
+        } else if (ImageUtils.isUrl(imageData)) {
+            loadProfilePictureFromUrl(imageData);
         } else {
+            loadProfilePictureFromBase64(imageData);
+        }
+    }
+    
+    /**
+     * Load profile picture from base64 string
+     */
+    private void loadProfilePictureFromBase64(String base64String) {
+        if (base64String == null || base64String.isEmpty() || profileImageView == null) {
+            if (profileImageView != null) {
+                profileImageView.setImageResource(R.drawable.ic_admin_avatar);
+            }
+            return;
+        }
+        
+        new Thread(() -> {
+            try {
+                Bitmap bitmap = ImageUtils.convertBase64ToBitmap(base64String);
+                
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (profileImageView != null && bitmap != null) {
+                            profileImageView.setImageBitmap(bitmap);
+                        } else {
+                            profileImageView.setImageResource(R.drawable.ic_admin_avatar);
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                android.util.Log.e("AdminProfile", "❌ Error loading base64 image: " + e.getMessage(), e);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (profileImageView != null) {
+                            profileImageView.setImageResource(R.drawable.ic_admin_avatar);
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    /**
+     * Load profile picture from URL (backward compatibility)
+     */
+    private void loadProfilePictureFromUrl(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty() || profileImageView == null) {
+            return;
+        }
+        
+        try {
+            new Thread(() -> {
+                try {
+                    URL url = new URL(imageUrl);
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setDoInput(true);
+                    connection.connect();
+                    InputStream input = connection.getInputStream();
+                    Bitmap bitmap = BitmapFactory.decodeStream(input);
+                    
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (profileImageView != null && bitmap != null) {
+                                profileImageView.setImageBitmap(bitmap);
+                            } else {
+                                profileImageView.setImageResource(R.drawable.ic_admin_avatar);
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            if (profileImageView != null) {
+                                profileImageView.setImageResource(R.drawable.ic_admin_avatar);
+                            }
+                        });
+                    }
+                }
+            }).start();
+        } catch (Exception e) {
             profileImageView.setImageResource(R.drawable.ic_admin_avatar);
         }
     }
@@ -378,44 +432,65 @@ public class AdminProfileFragment extends Fragment {
             return;
         }
 
-        showToast("Uploading profile picture...");
+        showToast("Converting and uploading profile picture...");
         
-        try {
-            // Create reference to profile pictures folder
-            String fileName = "profile_" + loggedInEmployeeId + "_" + System.currentTimeMillis() + ".jpg";
-            StorageReference profileRef = storageReference.child("profile_pictures/" + fileName);
-            
-            // Upload file
-            UploadTask uploadTask = profileRef.putFile(imageUri);
-            
-            uploadTask.addOnSuccessListener(taskSnapshot -> {
-                // Get download URL
-                profileRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                    String downloadUrl = uri.toString();
-                    
-                    // Update database with profile picture URL
-                    boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, downloadUrl);
-                    
-                    if (updated) {
-                        // Update current admin object
-                        currentAdmin.setProfilePictureUrl(downloadUrl);
-                        
-                        // Load the new image
-                        loadProfilePicture(downloadUrl);
-                        
-                        showToast("✅ Profile picture updated successfully!");
-                    } else {
-                        showToast("❌ Failed to update profile picture in database");
+        // Convert image to base64 string in background thread
+        new Thread(() -> {
+            try {
+                String base64Image = ImageUtils.convertImageUriToBase64(getContext(), imageUri);
+                
+                if (base64Image == null || base64Image.isEmpty()) {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            showToast("❌ Failed to convert image. Please try again.");
+                        });
                     }
-                }).addOnFailureListener(e -> {
-                    showToast("❌ Error getting download URL: " + e.getMessage());
-                });
-            }).addOnFailureListener(e -> {
-                showToast("❌ Error uploading image: " + e.getMessage());
-            });
+                    return;
+                }
+                
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, base64Image);
+                        
+                        if (updated) {
+                            currentAdmin.setProfilePictureUrl(base64Image);
+                            loadProfilePicture(base64Image);
+                            syncProfilePictureToFirebase(base64Image);
+                            showToast("✅ Profile picture updated successfully!");
+                        } else {
+                            showToast("❌ Failed to update profile picture in database");
+                        }
+                    });
+                }
+                
+            } catch (Exception e) {
+                android.util.Log.e("AdminProfile", "❌ Error converting image: " + e.getMessage(), e);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        showToast("❌ Error: " + e.getMessage());
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    /**
+     * Sync profile picture base64 string to Firebase RTDB
+     */
+    private void syncProfilePictureToFirebase(String base64Image) {
+        try {
+            FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
+            DatabaseReference employeeRef = database.getReference("employees").child(loggedInEmployeeId);
             
+            employeeRef.child("profile_picture_url").setValue(base64Image)
+                .addOnSuccessListener(aVoid -> {
+                    android.util.Log.d("AdminProfile", "✅ Profile picture synced to Firebase RTDB");
+                })
+                .addOnFailureListener(e -> {
+                    android.util.Log.e("AdminProfile", "❌ Failed to sync profile picture to Firebase: " + e.getMessage());
+                });
         } catch (Exception e) {
-            showToast("❌ Error: " + e.getMessage());
+            android.util.Log.e("AdminProfile", "❌ Error syncing to Firebase: " + e.getMessage(), e);
         }
     }
 
@@ -546,29 +621,123 @@ public class AdminProfileFragment extends Fragment {
     }
 
     /**
-     * Change password
+     * Change password using Firebase Authentication (like forgot password feature)
      */
     private void changePassword(String currentPassword, String newPassword) {
         try {
-            if (databaseHelper != null && loggedInUsername != null) {
-                boolean isValid = databaseHelper.validateEmployeeLogin(loggedInUsername, currentPassword);
-                
-                if (isValid) {
-                    boolean updated = databaseHelper.updateEmployeePassword(loggedInUsername, newPassword);
-                    
-                    if (updated) {
-                        showToast("✅ Password changed successfully!");
-                    } else {
-                        showToast("❌ Failed to change password");
-                    }
-                } else {
-                    showToast("❌ Current password is incorrect");
-                }
-            } else {
-                showToast("❌ Error: Database not initialized");
+            // Get user's email from current admin data
+            String email = currentAdmin.getEmail();
+            if (email == null || email.isEmpty()) {
+                // Try to get from input field
+                email = inputEmail.getText() != null ? inputEmail.getText().toString().trim() : null;
             }
+            
+            if (email == null || email.isEmpty() || !email.contains("@")) {
+                showToast("❌ Email address is required for password change. Please update your email first.");
+                return;
+            }
+            
+            // Create final copies for lambda expressions
+            final String finalEmail = email;
+            final String finalNewPassword = newPassword;
+            
+            FirebaseAuth auth = FirebaseAuth.getInstance();
+            if (auth == null) {
+                showToast("❌ Firebase Authentication is not available. Please try again later.");
+                return;
+            }
+            
+            // Show loading state
+            showToast("Changing password...");
+            
+            // Sign in with current password to verify
+            auth.signInWithEmailAndPassword(finalEmail, currentPassword)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        // Current password is correct - update to new password
+                        FirebaseUser user = auth.getCurrentUser();
+                        if (user != null) {
+                            user.updatePassword(finalNewPassword)
+                                .addOnCompleteListener(updateTask -> {
+                                    if (updateTask.isSuccessful()) {
+                                        // Password updated in Firebase Auth - sync to RTDB
+                                        syncPasswordToRTDB(finalEmail, finalNewPassword);
+                                        auth.signOut(); // Sign out after password change
+                                    } else {
+                                        Exception e = updateTask.getException();
+                                        String errorMsg = e != null ? e.getMessage() : "Failed to update password";
+                                        showToast("❌ Failed to update password: " + errorMsg);
+                                        auth.signOut();
+                                    }
+                                });
+                        } else {
+                            showToast("❌ User not found");
+                            auth.signOut();
+                        }
+                    } else {
+                        // Current password is incorrect
+                        Exception e = task.getException();
+                        String errorMsg = e != null && e.getMessage() != null ? e.getMessage() : "Current password is incorrect";
+                        if (errorMsg.contains("wrong-password") || errorMsg.contains("invalid-credential")) {
+                            showToast("❌ Current password is incorrect");
+                        } else {
+                            showToast("❌ Error: " + errorMsg);
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    showToast("❌ Error: " + e.getMessage());
+                });
         } catch (Exception e) {
             showToast("Error changing password: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Sync password to Firebase RTDB after successful Firebase Auth update
+     */
+    private void syncPasswordToRTDB(String email, String newPassword) {
+        try {
+            DatabaseReference employeesRef = FirebaseDatabase.getInstance(
+                    "https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("employees");
+            
+            employeesRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                @Override
+                public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                    if (snapshot.exists() && snapshot.hasChildren()) {
+                        String normalizedEmail = email.toLowerCase().trim();
+                        
+                        for (com.google.firebase.database.DataSnapshot child : snapshot.getChildren()) {
+                            Object emailObj = child.child("email").getValue();
+                            if (emailObj != null) {
+                                String storedEmail = emailObj.toString().trim().toLowerCase();
+                                
+                                if (storedEmail.equals(normalizedEmail)) {
+                                    // Found the employee - update password in RTDB
+                                    child.getRef().child("password").setValue(newPassword)
+                                        .addOnSuccessListener(aVoid -> {
+                                            showToast("✅ Password changed successfully!");
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            showToast("✅ Password changed in Firebase Auth, but failed to sync to database. Please contact administrator.");
+                                        });
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    // Email not found in RTDB - password still updated in Firebase Auth
+                    showToast("✅ Password changed in Firebase Auth, but email not found in database.");
+                }
+                
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    showToast("✅ Password changed in Firebase Auth, but failed to sync to database.");
+                }
+            });
+        } catch (Exception e) {
+            showToast("✅ Password changed in Firebase Auth, but failed to sync to database.");
         }
     }
 

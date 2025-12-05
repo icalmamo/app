@@ -23,12 +23,17 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
+import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Employee;
 import com.example.h_cas.models.Notification;
 import com.example.h_cas.models.Prescription;
 import com.example.h_cas.utils.NotificationDropdownHelper;
+import com.google.firebase.database.ChildEventListener;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * NurseDashboardActivity provides the main interface for nurses.
@@ -44,10 +49,13 @@ public class NurseDashboardActivity extends AppCompatActivity {
     private TextView notificationBadge;
     private Employee currentNurse;
     private HCasDatabaseHelper databaseHelper;
+    private FirebaseRTDBHelper firebaseRTDBHelper;
     private String loggedInFullName;
     private String loggedInUsername;
     private String loggedInRole;
     private NotificationDropdownHelper notificationDropdownHelper;
+    private ChildEventListener newPrescriptionsListener;
+    private Set<String> knownPrescriptionIds = new HashSet<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,6 +84,7 @@ public class NurseDashboardActivity extends AppCompatActivity {
 
     private void initializeDatabase() {
         databaseHelper = new HCasDatabaseHelper(this);
+        firebaseRTDBHelper = new FirebaseRTDBHelper(this);
         
         // Get employee data from intent
         Intent intent = getIntent();
@@ -125,8 +134,14 @@ public class NurseDashboardActivity extends AppCompatActivity {
                 updateNotificationBadge(count);
             });
             
-            // Load sample notifications (replace with actual data from database/Firebase)
-            loadNotifications();
+            // Set as nurse mode (hide mark all read button)
+            notificationDropdownHelper.setNurseMode(true);
+            
+            // Load existing prescriptions and convert to notifications
+            loadExistingPrescriptionNotifications();
+            
+            // Subscribe to new prescription notifications from Firebase
+            subscribeToNewPrescriptionNotifications();
             
             notificationButton.setOnClickListener(v -> {
                 // Toggle dropdown
@@ -181,111 +196,134 @@ public class NurseDashboardActivity extends AppCompatActivity {
     }
 
     /**
-     * Load notifications for Nurse - shows doctor prescriptions and diagnosis
+     * Load existing prescriptions from Firebase and convert them to notifications
      */
-    private void loadNotifications() {
-        // Load notifications in background thread
-        com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-            try {
-                java.util.List<Notification> notifications = new java.util.ArrayList<>();
+    private void loadExistingPrescriptionNotifications() {
+        if (firebaseRTDBHelper == null) {
+            return;
+        }
+        
+        // Load all prescriptions from history
+        firebaseRTDBHelper.getAllPrescriptionsFromHistory(prescriptions -> {
+            if (prescriptions == null || prescriptions.isEmpty()) {
+                android.util.Log.d("NurseDashboard", "No existing prescriptions found");
+                return;
+            }
+            
+            android.util.Log.d("NurseDashboard", "Loading " + prescriptions.size() + " existing prescriptions as notifications");
+            
+            // Convert prescriptions to notifications
+            List<Notification> notifications = new ArrayList<>();
+            for (Prescription prescription : prescriptions) {
+                if (prescription == null || prescription.getPrescriptionId() == null) {
+                    continue;
+                }
                 
-                // 1. Get prescriptions from doctors
-                List<com.example.h_cas.models.Prescription> prescriptions = databaseHelper != null ? 
-                    databaseHelper.getAllPrescriptions() : new java.util.ArrayList<>();
+                // Add to known prescriptions to avoid duplicate notifications
+                synchronized (knownPrescriptionIds) {
+                    knownPrescriptionIds.add(prescription.getPrescriptionId());
+                }
                 
-                // Convert prescriptions to notifications
-                int prescriptionCount = Math.min(prescriptions.size(), 5);
-                for (int i = 0; i < prescriptionCount; i++) {
-                    com.example.h_cas.models.Prescription prescription = prescriptions.get(i);
-                    String doctorName = prescription.getDoctorName() != null && !prescription.getDoctorName().isEmpty() 
-                        ? prescription.getDoctorName() 
+                String doctorName = prescription.getDoctorName() != null && !prescription.getDoctorName().isEmpty()
+                        ? prescription.getDoctorName()
                         : "Doctor";
-                    String patientName = prescription.getPatientName() != null ? prescription.getPatientName() : "Patient";
-                    String medication = prescription.getMedication() != null ? prescription.getMedication() : "medication";
-                    
-                    String message = "Prescription for " + patientName + ": " + medication + 
-                        " (" + prescription.getDosage() + " - " + prescription.getFrequency() + ")";
-                    String timestamp = prescription.getCreatedDate() != null ? 
-                        formatTimestamp(prescription.getCreatedDate()) : "Recently";
-                    
-                    Notification notif = new Notification(
+                String patientName = prescription.getPatientName() != null && !prescription.getPatientName().isEmpty()
+                        ? prescription.getPatientName()
+                        : "Patient";
+                String medication = prescription.getMedication() != null ? prescription.getMedication() : "medication";
+                
+                String originalDate = prescription.getCreatedDate();
+                String timestamp = originalDate != null ? formatTimestamp(originalDate) : "Recently";
+                
+                String message = "New prescription for " + patientName + ": " + medication;
+                if (prescription.getFrequency() != null && !prescription.getFrequency().isEmpty()) {
+                    message += " (" + prescription.getFrequency();
+                    if (prescription.getDuration() != null && !prescription.getDuration().isEmpty()) {
+                        message += " - " + prescription.getDuration();
+                    }
+                    message += ")";
+                }
+                
+                Notification notification = new Notification(
                         prescription.getPrescriptionId(),
-                        doctorName,
+                        "New Prescription",
                         message,
                         timestamp
-                    );
-                    notifications.add(notif);
-                }
-                
-                // 2. Get patients with recent diagnosis (vital signs/symptoms)
-                List<com.example.h_cas.models.Patient> allPatients = databaseHelper != null ? 
-                    databaseHelper.getAllPatients() : new java.util.ArrayList<>();
-                
-                // Filter patients with recent vital signs or symptoms (indicating diagnosis)
-                int diagnosisCount = 0;
-                for (com.example.h_cas.models.Patient patient : allPatients) {
-                    if (diagnosisCount >= 5) break; // Limit to 5 diagnosis notifications
-                    
-                    boolean hasDiagnosis = false;
-                    String diagnosisInfo = "";
-                    
-                    // Check for symptoms
-                    if (patient.getSymptomsDescription() != null && !patient.getSymptomsDescription().isEmpty()) {
-                        hasDiagnosis = true;
-                        diagnosisInfo = "Symptoms: " + patient.getSymptomsDescription();
-                    }
-                    
-                    // Check for vital signs
-                    if (patient.getBloodPressure() != null && !patient.getBloodPressure().isEmpty()) {
-                        hasDiagnosis = true;
-                        if (!diagnosisInfo.isEmpty()) diagnosisInfo += " | ";
-                        diagnosisInfo += "BP: " + patient.getBloodPressure();
-                    }
-                    
-                    if (patient.getTemperature() != null && !patient.getTemperature().isEmpty()) {
-                        hasDiagnosis = true;
-                        if (!diagnosisInfo.isEmpty()) diagnosisInfo += " | ";
-                        diagnosisInfo += "Temp: " + patient.getTemperature();
-                    }
-                    
-                    if (hasDiagnosis) {
-                        String patientName = patient.getFullName() != null && !patient.getFullName().isEmpty() 
-                            ? patient.getFullName() 
-                            : (patient.getFirstName() + " " + patient.getLastName()).trim();
-                        
-                        String message = "Diagnosis for " + patientName + ": " + diagnosisInfo;
-                        String timestamp = patient.getCreatedDate() != null ? 
-                            formatTimestamp(patient.getCreatedDate()) : "Recently";
-                        
-                        Notification notif = new Notification(
-                            patient.getPatientId() + "_diagnosis",
-                            "Doctor",
-                            message,
-                            timestamp
-                        );
-                        notifications.add(notif);
-                        diagnosisCount++;
-                    }
-                }
-                
-                // Limit total to 10 notifications
-                final java.util.List<Notification> finalNotifications;
-                if (notifications.size() > 10) {
-                    finalNotifications = new java.util.ArrayList<>(notifications.subList(0, 10));
-                } else {
-                    finalNotifications = new java.util.ArrayList<>(notifications);
-                }
-                
-                // Update UI on main thread
-                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                    if (notificationDropdownHelper != null) {
-                        notificationDropdownHelper.setNotifications(finalNotifications);
-                    }
-                    updateNotificationBadge(finalNotifications.size());
-                });
-            } catch (Exception e) {
-                android.util.Log.e("NurseDashboard", "Error loading notifications", e);
+                );
+                notifications.add(notification);
             }
+            
+            // Set notifications (this will load read status from Firebase)
+            runOnUiThread(() -> {
+                if (notificationDropdownHelper != null && !notifications.isEmpty()) {
+                    notificationDropdownHelper.setNotifications(notifications);
+                    updateNotificationBadge(notificationDropdownHelper.getUnreadNotificationCount());
+                }
+            });
+        });
+    }
+    
+    /**
+     * Listen for new prescriptions being added to Firebase RTDB and update notifications in real-time.
+     */
+    private void subscribeToNewPrescriptionNotifications() {
+        if (firebaseRTDBHelper == null || newPrescriptionsListener != null) {
+            return;
+        }
+        
+        newPrescriptionsListener = firebaseRTDBHelper.listenForNewPrescriptions(prescription -> {
+            if (prescription == null || prescription.getPrescriptionId() == null) {
+                return;
+            }
+            
+            boolean alreadyKnown;
+            synchronized (knownPrescriptionIds) {
+                alreadyKnown = !knownPrescriptionIds.add(prescription.getPrescriptionId());
+            }
+            if (alreadyKnown) {
+                return;
+            }
+            
+            String doctorName = prescription.getDoctorName() != null && !prescription.getDoctorName().isEmpty()
+                    ? prescription.getDoctorName()
+                    : "Doctor";
+            String patientName = prescription.getPatientName() != null && !prescription.getPatientName().isEmpty()
+                    ? prescription.getPatientName()
+                    : "Patient";
+            String medication = prescription.getMedication() != null ? prescription.getMedication() : "medication";
+            
+            String originalDate = prescription.getCreatedDate();
+            String timestamp = originalDate != null ? formatTimestamp(originalDate) : "Recently";
+            
+            android.util.Log.d("NurseDashboard", "New prescription notification: " + medication + " for " + patientName + " - " + timestamp);
+            
+            String message = "New prescription for " + patientName + ": " + medication;
+            if (prescription.getFrequency() != null && !prescription.getFrequency().isEmpty()) {
+                message += " (" + prescription.getFrequency();
+                if (prescription.getDuration() != null && !prescription.getDuration().isEmpty()) {
+                    message += " - " + prescription.getDuration();
+                }
+                message += ")";
+            }
+            
+            Notification notification = new Notification(
+                    prescription.getPrescriptionId(),
+                    "New Prescription",
+                    message,
+                    timestamp
+            );
+            
+            runOnUiThread(() -> {
+                if (notificationDropdownHelper != null) {
+                    notificationDropdownHelper.addNotification(notification);
+                    // Badge should show unread count, not total count
+                    updateNotificationBadge(notificationDropdownHelper.getUnreadNotificationCount());
+                } else {
+                    synchronized (knownPrescriptionIds) {
+                        updateNotificationBadge(knownPrescriptionIds.size());
+                    }
+                }
+            });
         });
     }
 
@@ -309,13 +347,20 @@ public class NurseDashboardActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Refresh notifications when activity resumes
-        loadNotifications();
+        // Subscribe to notifications if not already subscribed
+        if (newPrescriptionsListener == null) {
+            subscribeToNewPrescriptionNotifications();
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // Remove Firebase listener
+        if (firebaseRTDBHelper != null && newPrescriptionsListener != null) {
+            firebaseRTDBHelper.removePrescriptionListener(newPrescriptionsListener);
+            newPrescriptionsListener = null;
+        }
         if (notificationDropdownHelper != null) {
             notificationDropdownHelper.cleanup();
         }

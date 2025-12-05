@@ -61,7 +61,7 @@ public class PatientRegistrationFragment extends Fragment {
     private com.google.android.material.textfield.TextInputEditText inputBloodPressure;
     private com.google.android.material.textfield.TextInputEditText inputTemperature;
     private com.google.android.material.textfield.TextInputEditText inputBloodSugar;
-    private com.google.android.material.textfield.TextInputEditText inputPainScale;
+    private AutoCompleteTextView inputPainScale;
     private com.google.android.material.textfield.TextInputEditText inputSymptomsDescription;
     
     // Emergency Contact Fields
@@ -79,12 +79,18 @@ public class PatientRegistrationFragment extends Fragment {
     private android.widget.TextView historyPastHealth;
 
     private com.example.h_cas.database.HCasDatabaseHelper databaseHelper;
+    private com.example.h_cas.database.FirebaseRTDBHelper firebaseRTDBHelper;
     private boolean isExistingPatient = false;
     private String existingPatientId = null;
     private com.example.h_cas.utils.NFCHelper nfcHelper;
     private String scannedNfcUid = null;
     private android.widget.TextView nfcUidDisplay;
     private com.google.android.material.button.MaterialButton buttonScanNFC;
+    
+    // Email validation state
+    private boolean isEmailValid = false;
+    private boolean isEmailExisting = false;
+    private boolean isEmailValidating = false;
 
     @Nullable
     @Override
@@ -122,6 +128,106 @@ public class PatientRegistrationFragment extends Fragment {
         
         Bundle args = getArguments();
         
+        // Try to load from Firebase first (primary source), then SQLite as fallback
+        if (existingPatientId != null) {
+            // Try Firebase first
+            if (firebaseRTDBHelper != null) {
+                android.util.Log.d("PatientRegistration", "🔄 Loading existing patient from Firebase: " + existingPatientId);
+                firebaseRTDBHelper.getPatientById(existingPatientId, firebasePatient -> {
+                    if (firebasePatient != null) {
+                        // Load data from Firebase patient
+                        loadPatientDataToForm(firebasePatient);
+                        android.util.Log.d("PatientRegistration", "✅ Loaded existing patient data from Firebase: " + existingPatientId);
+                        android.util.Log.d("PatientRegistration", "   Birth Place: '" + (firebasePatient.getBirthPlace() != null ? firebasePatient.getBirthPlace() : "null") + "'");
+                        return;
+                    } else {
+                        // Firebase doesn't have it, try SQLite
+                        android.util.Log.d("PatientRegistration", "⚠️ Patient not found in Firebase, trying SQLite: " + existingPatientId);
+                        if (databaseHelper != null) {
+                            com.example.h_cas.models.Patient dbPatient = databaseHelper.getPatientById(existingPatientId);
+                            if (dbPatient != null) {
+                                loadPatientDataToForm(dbPatient);
+                                android.util.Log.d("PatientRegistration", "✅ Loaded existing patient data from SQLite: " + existingPatientId);
+                                android.util.Log.d("PatientRegistration", "   Birth Place: '" + (dbPatient.getBirthPlace() != null ? dbPatient.getBirthPlace() : "null") + "'");
+                                
+                                // Don't sync here - only sync when user clicks Save button
+                                // This prevents empty data from being saved to Firebase
+                                return;
+                            }
+                        }
+                        // Fallback to Bundle if both fail
+                        loadPatientDataFromBundle(args);
+                    }
+                });
+            } else if (databaseHelper != null) {
+                // Fallback to SQLite if Firebase helper not available
+                com.example.h_cas.models.Patient dbPatient = databaseHelper.getPatientById(existingPatientId);
+                if (dbPatient != null) {
+                    loadPatientDataToForm(dbPatient);
+                    android.util.Log.d("PatientRegistration", "✅ Loaded existing patient data from SQLite: " + existingPatientId);
+                    android.util.Log.d("PatientRegistration", "   Birth Place: '" + (dbPatient.getBirthPlace() != null ? dbPatient.getBirthPlace() : "null") + "'");
+                    
+                    // Don't sync here - only sync when user clicks Save button
+                    // This prevents empty data from being saved to Firebase
+                    return;
+                }
+            }
+        }
+        
+        // Fallback to Bundle data if both Firebase and SQLite failed
+        loadPatientDataFromBundle(args);
+    }
+    
+    /**
+     * Load patient data to form fields
+     */
+    private void loadPatientDataToForm(com.example.h_cas.models.Patient patient) {
+        if (patient == null) return;
+        
+        if (inputFirstName != null) inputFirstName.setText(patient.getFirstName() != null ? patient.getFirstName() : "");
+        if (inputLastName != null) inputLastName.setText(patient.getLastName() != null ? patient.getLastName() : "");
+        if (inputSuffix != null) inputSuffix.setText(patient.getSuffix() != null ? patient.getSuffix() : "");
+        if (inputFullAddress != null) inputFullAddress.setText(patient.getFullAddress() != null ? patient.getFullAddress() : "");
+        if (inputDob != null) inputDob.setText(patient.getDateOfBirth() != null ? patient.getDateOfBirth() : "");
+        if (inputBirthPlace != null) inputBirthPlace.setText(patient.getBirthPlace() != null ? patient.getBirthPlace() : "");
+        if (inputGender != null) inputGender.setText(patient.getGender() != null ? patient.getGender() : "");
+        if (inputAge != null) inputAge.setText(patient.getAge() != null ? patient.getAge() : "");
+        if (inputPhoneNumber != null) inputPhoneNumber.setText(patient.getPhoneNumber() != null ? patient.getPhoneNumber() : "");
+        if (inputEmail != null) inputEmail.setText(patient.getEmail() != null ? patient.getEmail() : "");
+        if (inputAllergies != null) inputAllergies.setText(patient.getAllergies() != null ? patient.getAllergies() : "");
+        if (inputMedications != null) inputMedications.setText(patient.getMedications() != null ? patient.getMedications() : "");
+        if (inputMedicalHistory != null) inputMedicalHistory.setText(patient.getMedicalHistory() != null ? patient.getMedicalHistory() : "");
+        if (inputEmergencyName != null) inputEmergencyName.setText(patient.getEmergencyContactName() != null ? patient.getEmergencyContactName() : "");
+        if (inputEmergencyPhone != null) inputEmergencyPhone.setText(patient.getEmergencyContactPhone() != null ? patient.getEmergencyContactPhone() : "");
+        
+        // Make personal info fields read-only for existing patients
+        if (inputFirstName != null) inputFirstName.setEnabled(false);
+        if (inputLastName != null) inputLastName.setEnabled(false);
+        if (inputSuffix != null) inputSuffix.setEnabled(false);
+        if (inputFullAddress != null) inputFullAddress.setEnabled(false);
+        if (inputDob != null) inputDob.setEnabled(false);
+        if (inputBirthPlace != null) inputBirthPlace.setEnabled(false);
+        if (inputGender != null) inputGender.setEnabled(false);
+        if (inputAge != null) inputAge.setEnabled(false);
+        if (inputPhoneNumber != null) inputPhoneNumber.setEnabled(false);
+        if (inputEmail != null) inputEmail.setEnabled(false);
+        
+        // Clear vital signs fields for new entry
+        if (inputPulseRate != null) inputPulseRate.setText("");
+        if (inputBloodPressure != null) inputBloodPressure.setText("");
+        if (inputTemperature != null) inputTemperature.setText("");
+        if (inputBloodSugar != null) inputBloodSugar.setText("");
+        if (inputPainScale != null) inputPainScale.setText("");
+        if (inputSymptomsDescription != null) inputSymptomsDescription.setText("");
+    }
+    
+    /**
+     * Load patient data from Bundle (fallback)
+     */
+    private void loadPatientDataFromBundle(Bundle args) {
+        if (args == null) return;
+        
+        // Fallback to Bundle data if database load failed
         // Pre-fill personal information
         if (inputFirstName != null) inputFirstName.setText(args.getString("FIRST_NAME", ""));
         if (inputLastName != null) inputLastName.setText(args.getString("LAST_NAME", ""));
@@ -296,6 +402,9 @@ public class PatientRegistrationFragment extends Fragment {
         // Set up gender dropdown
         setupGenderDropdown();
         
+        // Set up pain scale dropdown
+        setupPainScaleDropdown();
+        
         // Set up address autocomplete
         setupAddressAutocomplete();
         
@@ -311,12 +420,16 @@ public class PatientRegistrationFragment extends Fragment {
         // Set up phone number field with validation
         setupPhoneNumberField();
         
+        // Set up emergency phone number field with same validation as phone number
+        setupEmergencyPhoneField();
+        
         // Set up email field with validation
         setupEmailField();
     }
 
     private void initializeDatabase(@NonNull View view) {
         databaseHelper = new com.example.h_cas.database.HCasDatabaseHelper(view.getContext());
+        firebaseRTDBHelper = new com.example.h_cas.database.FirebaseRTDBHelper(view.getContext());
     }
     
     /**
@@ -483,6 +596,32 @@ public class PatientRegistrationFragment extends Fragment {
         inputGender.setAdapter(adapter);
         inputGender.setThreshold(1); // Start showing suggestions after 1 character
     }
+    
+    /**
+     * Set up pain scale dropdown with values 1-10
+     */
+    private void setupPainScaleDropdown() {
+        String[] painScaleOptions = {
+            "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"
+        };
+        
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(), 
+            android.R.layout.simple_list_item_1, painScaleOptions);
+        inputPainScale.setAdapter(adapter);
+        inputPainScale.setThreshold(0); // Show all options immediately
+        
+        // Set click listener to show dropdown when clicked
+        inputPainScale.setOnClickListener(v -> {
+            inputPainScale.showDropDown();
+        });
+        
+        // Also show dropdown when focused
+        inputPainScale.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                inputPainScale.showDropDown();
+            }
+        });
+    }
 
     /**
      * Set up address autocomplete with common address suggestions
@@ -641,6 +780,25 @@ public class PatientRegistrationFragment extends Fragment {
                 Calendar dob = Calendar.getInstance();
                 dob.setTime(dobDate);
                 
+                // Validate: Date of birth cannot be in the future
+                if (dob.after(today)) {
+                    // Future date - show error and clear fields
+                    if (inputDob != null && inputDob.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                        ((com.google.android.material.textfield.TextInputLayout) inputDob.getParent())
+                            .setError("Date of birth cannot be in the future");
+                    }
+                    if (inputAge != null) {
+                        inputAge.setText("");
+                    }
+                    return;
+                }
+                
+                // Clear error if date is valid
+                if (inputDob != null && inputDob.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                    ((com.google.android.material.textfield.TextInputLayout) inputDob.getParent())
+                        .setError(null);
+                }
+                
                 // Calculate age
                 int age = today.get(Calendar.YEAR) - dob.get(Calendar.YEAR);
                 
@@ -660,6 +818,10 @@ public class PatientRegistrationFragment extends Fragment {
             // Invalid date format, clear age field
             if (inputAge != null) {
                 inputAge.setText("");
+            }
+            if (inputDob != null && inputDob.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputDob.getParent())
+                    .setError("Invalid date format. Use YYYY-MM-DD");
             }
         } catch (Exception e) {
             // Any other error, clear age field
@@ -777,6 +939,113 @@ public class PatientRegistrationFragment extends Fragment {
     }
     
     /**
+     * Set up emergency phone number field with validation (same as phone number - 11 digits, starts with 09, numbers only)
+     */
+    private void setupEmergencyPhoneField() {
+        if (inputEmergencyPhone != null) {
+            // Set input type to number
+            inputEmergencyPhone.setInputType(InputType.TYPE_CLASS_PHONE);
+            
+            // Add input filter to limit to 11 digits and only numbers
+            InputFilter[] filters = new InputFilter[] {
+                new InputFilter.LengthFilter(11), // Maximum 11 digits
+                new InputFilter() {
+                    @Override
+                    public CharSequence filter(CharSequence source, int start, int end,
+                                               Spanned dest, int dstart, int dend) {
+                        // Only allow digits
+                        for (int i = start; i < end; i++) {
+                            if (!Character.isDigit(source.charAt(i))) {
+                                return ""; // Reject non-digit characters
+                            }
+                        }
+                        return null; // Accept the input
+                    }
+                }
+            };
+            inputEmergencyPhone.setFilters(filters);
+            
+            // Add TextWatcher for real-time validation and auto-insert "09" prefix
+            inputEmergencyPhone.addTextChangedListener(new TextWatcher() {
+                private boolean isUpdating = false;
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                    // Not needed
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    // Not needed
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (isUpdating) {
+                        return;
+                    }
+                    
+                    String phoneNumber = s.toString().trim();
+                    
+                    // Auto-insert "09" prefix if user starts typing without it
+                    if (!phoneNumber.isEmpty() && !phoneNumber.startsWith("09")) {
+                        isUpdating = true;
+                        // If user typed a digit that's not "0" or "9", prepend "09"
+                        if (phoneNumber.length() == 1 && Character.isDigit(phoneNumber.charAt(0))) {
+                            // User typed a single digit, prepend "09"
+                            s.clear();
+                            s.append("09");
+                            s.append(phoneNumber);
+                        } else if (phoneNumber.startsWith("0") && phoneNumber.length() > 1 && phoneNumber.charAt(1) != '9') {
+                            // User typed "0" followed by non-9 digit, insert "9" after "0"
+                            s.clear();
+                            s.append("09");
+                            s.append(phoneNumber.substring(1));
+                        } else {
+                            // User typed something else, prepend "09"
+                            s.clear();
+                            s.append("09");
+                            s.append(phoneNumber);
+                        }
+                        isUpdating = false;
+                    }
+                    
+                    // Prevent deletion of "09" prefix
+                    if (phoneNumber.length() < 2 && !phoneNumber.isEmpty()) {
+                        isUpdating = true;
+                        s.clear();
+                        s.append("09");
+                        isUpdating = false;
+                    }
+                    
+                    // Limit to 11 digits
+                    if (phoneNumber.length() > 11) {
+                        isUpdating = true;
+                        s.delete(11, phoneNumber.length());
+                        isUpdating = false;
+                    }
+                    
+                    validateEmergencyPhoneNumber(s.toString().trim());
+                }
+            });
+            
+            // Set initial "09" prefix when field gains focus
+            inputEmergencyPhone.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus && inputEmergencyPhone.getText() != null) {
+                    String currentText = inputEmergencyPhone.getText().toString().trim();
+                    if (currentText.isEmpty()) {
+                        inputEmergencyPhone.setText("09");
+                        inputEmergencyPhone.setSelection(2); // Move cursor to end
+                    } else if (!currentText.startsWith("09")) {
+                        inputEmergencyPhone.setText("09" + currentText);
+                        inputEmergencyPhone.setSelection(inputEmergencyPhone.getText().length());
+                    }
+                }
+            });
+        }
+    }
+    
+    /**
      * Validate phone number format (11 digits, starts with 09)
      */
     private void validatePhoneNumber(String phoneNumber) {
@@ -813,16 +1082,54 @@ public class PatientRegistrationFragment extends Fragment {
             phoneLayout.setError(null);
         }
     }
+    
+    /**
+     * Validate emergency phone number format (11 digits, starts with 09)
+     */
+    private void validateEmergencyPhoneNumber(String phoneNumber) {
+        com.google.android.material.textfield.TextInputLayout phoneLayout = null;
+        if (inputEmergencyPhone != null && inputEmergencyPhone.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+            phoneLayout = (com.google.android.material.textfield.TextInputLayout) inputEmergencyPhone.getParent();
+        }
+        
+        if (phoneNumber.isEmpty()) {
+            if (phoneLayout != null) {
+                phoneLayout.setError(null);
+            }
+            return;
+        }
+        
+        // Check if it starts with 09
+        if (!phoneNumber.startsWith("09")) {
+            if (phoneLayout != null) {
+                phoneLayout.setError("Phone number must start with 09");
+            }
+            return;
+        }
+        
+        // Check if it's exactly 11 digits
+        if (phoneNumber.length() != 11) {
+            if (phoneLayout != null) {
+                phoneLayout.setError("Phone number must be exactly 11 digits");
+            }
+            return;
+        }
+        
+        // Valid phone number
+        if (phoneLayout != null) {
+            phoneLayout.setError(null);
+        }
+    }
 
     /**
-     * Set up email field with validation (valid email format only)
+     * Set up email field with real-time validation
      */
     private void setupEmailField() {
         if (inputEmail != null) {
             // Set input type to email
             inputEmail.setInputType(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
             
-            // Add TextWatcher for real-time validation
+            // Add TextWatcher for real-time validation with debouncing
             inputEmail.addTextChangedListener(new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -837,40 +1144,194 @@ public class PatientRegistrationFragment extends Fragment {
                 @Override
                 public void afterTextChanged(Editable s) {
                     String email = s.toString().trim();
-                    validateEmail(email);
+                    
+                    // Reset validation state when email changes
+                    isEmailValid = false;
+                    isEmailExisting = false;
+                    
+                    // First do format validation
+                    validateEmailFormat(email);
+                    
+                    // If format is valid, check if email exists (with debounce to avoid too many API calls)
+                    if (isEmailValid && !email.isEmpty()) {
+                        // Use debouncer to wait 1 second after user stops typing
+                        com.example.h_cas.utils.Debouncer.getInstance().debounce("email_validation", () -> {
+                            if (getActivity() != null) {
+                                validateEmailExists(email);
+                            }
+                        }, 1000); // 1 second delay
+                    }
+                }
+            });
+            
+            // Add focus listener to validate when user leaves the field
+            inputEmail.setOnFocusChangeListener((v, hasFocus) -> {
+                if (!hasFocus) {
+                    // User left the email field - validate if format is valid
+                    String email = inputEmail.getText() != null ? inputEmail.getText().toString().trim() : "";
+                    if (!email.isEmpty() && isEmailValid && !isEmailValidating && !isEmailExisting) {
+                        // Format is valid but existence hasn't been checked yet
+                        validateEmailExists(email);
+                    }
                 }
             });
         }
     }
     
     /**
-     * Validate email format
+     * Validate email format (local validation only)
      */
-    private void validateEmail(String email) {
+    private void validateEmailFormat(String email) {
         com.google.android.material.textfield.TextInputLayout emailLayout = null;
         if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
             emailLayout = (com.google.android.material.textfield.TextInputLayout) inputEmail.getParent();
         }
         
         if (email.isEmpty()) {
+            isEmailValid = false;
+            isEmailExisting = false;
             if (emailLayout != null) {
                 emailLayout.setError(null);
             }
             return;
         }
         
-        // Check if email format is valid
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        // Trim and normalize email
+        email = email.trim().toLowerCase();
+        
+        // Stricter email regex pattern
+        String emailPattern = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
+        
+        if (!email.matches(emailPattern)) {
+            isEmailValid = false;
+            isEmailExisting = false;
             if (emailLayout != null) {
                 emailLayout.setError("Please enter a valid email address");
             }
             return;
         }
         
-        // Valid email
-        if (emailLayout != null) {
-            emailLayout.setError(null);
+        // Additional validation: Check for proper email structure
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0 || atIndex >= email.length() - 1) {
+            isEmailValid = false;
+            isEmailExisting = false;
+            if (emailLayout != null) {
+                emailLayout.setError("Please enter a valid email address");
+            }
+            return;
         }
+        
+        String localPart = email.substring(0, atIndex);
+        String domainPart = email.substring(atIndex + 1);
+        
+        // Local part validation
+        if (localPart.length() > 64 || localPart.isEmpty() ||
+            localPart.startsWith(".") || localPart.endsWith(".") ||
+            localPart.startsWith("_") || localPart.endsWith("_") ||
+            localPart.startsWith("-") || localPart.endsWith("-")) {
+            isEmailValid = false;
+            isEmailExisting = false;
+            if (emailLayout != null) {
+                emailLayout.setError("Email address is invalid");
+            }
+            return;
+        }
+        
+        // Domain validation
+        if (domainPart.length() > 253 || domainPart.isEmpty() ||
+            !domainPart.contains(".") ||
+            domainPart.startsWith(".") || domainPart.endsWith(".") ||
+            domainPart.startsWith("-") || domainPart.endsWith("-")) {
+            isEmailValid = false;
+            isEmailExisting = false;
+            if (emailLayout != null) {
+                emailLayout.setError("Email domain is invalid");
+            }
+            return;
+        }
+        
+        // TLD validation
+        String[] domainParts = domainPart.split("\\.");
+        if (domainParts.length < 2 || domainParts[domainParts.length - 1].length() < 2) {
+            isEmailValid = false;
+            isEmailExisting = false;
+            if (emailLayout != null) {
+                emailLayout.setError("Email must have a valid top-level domain (e.g., .com, .org)");
+            }
+            return;
+        }
+        
+        // Format is valid, but we still need to check if email exists
+        isEmailValid = true;
+        // Don't clear error yet - wait for existence check
+        // Show "Checking..." message
+        if (emailLayout != null && !isEmailValidating) {
+            emailLayout.setError("Checking if email exists...");
+        }
+    }
+    
+    /**
+     * Validate if email account actually exists using API
+     */
+    private void validateEmailExists(String email) {
+        if (email == null || email.isEmpty() || !isEmailValid) {
+            return;
+        }
+        
+        isEmailValidating = true;
+        
+        // Get emailLayout as final variable for use in lambda
+        final com.google.android.material.textfield.TextInputLayout emailLayout;
+        if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+            emailLayout = (com.google.android.material.textfield.TextInputLayout) inputEmail.getParent();
+        } else {
+            emailLayout = null;
+        }
+        
+        // Show checking message
+        if (emailLayout != null && getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                emailLayout.setError("Checking if email exists...");
+            });
+        }
+        
+        // Call API to validate email existence
+        com.example.h_cas.utils.EmailValidator.validateEmailExists(email, new com.example.h_cas.utils.EmailValidator.EmailValidationCallback() {
+            @Override
+            public void onValidationComplete(boolean isValid, boolean isDeliverable, String errorMessage) {
+                isEmailValidating = false;
+                
+                // Update state
+                isEmailValid = isValid;
+                isEmailExisting = isDeliverable;
+                
+                // Update UI on main thread
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (emailLayout != null) {
+                            if (isValid && isDeliverable) {
+                                // Email is valid and exists - clear error (green/valid state)
+                                emailLayout.setError(null);
+                            } else {
+                                // Email doesn't exist or is invalid - show error (red box)
+                                String errorMsg = errorMessage != null ? errorMessage : "Email account does not exist";
+                                emailLayout.setError(errorMsg);
+                            }
+                        }
+                        
+                        // If validation was triggered from save button, re-enable it
+                        if (buttonSavePatient != null) {
+                            buttonSavePatient.setEnabled(true);
+                            buttonSavePatient.setText("Save Patient");
+                            
+                            // If email is valid and exists, user can try saving again
+                            // (They need to click save button again)
+                        }
+                    });
+                }
+            }
+        });
     }
 
     /**
@@ -903,18 +1364,8 @@ public class PatientRegistrationFragment extends Fragment {
 
     private void setupListeners() {
         buttonSavePatient.setOnClickListener(v -> {
-            // Show loading state
-            buttonSavePatient.setEnabled(false);
-            buttonSavePatient.setText("Saving...");
-            
-            // Perform save operation
+            // Perform save operation (button state will be managed by savePatient method)
             savePatient();
-            
-            // Reset button state after save
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                buttonSavePatient.setEnabled(true);
-                buttonSavePatient.setText("Save Patient");
-            }, 2000); // Reset after 2 seconds
         });
         
         buttonExistingPatient.setOnClickListener(v -> {
@@ -938,7 +1389,20 @@ public class PatientRegistrationFragment extends Fragment {
         });
     }
 
+    /**
+     * Reset save button to normal state
+     */
+    private void resetSaveButton() {
+        if (buttonSavePatient != null) {
+            buttonSavePatient.setEnabled(true);
+            buttonSavePatient.setText("Save Patient");
+        }
+    }
+    
     private void savePatient() {
+        // Ensure button is in normal state at start
+        resetSaveButton();
+        
         // Collect all form data
         String firstName = getText(inputFirstName);
         String lastName = getText(inputLastName);
@@ -969,36 +1433,85 @@ public class PatientRegistrationFragment extends Fragment {
         // Validate required fields
         if (firstName.isEmpty() || lastName.isEmpty()) {
             showToast("First name and last name are required");
+            resetSaveButton();
             return;
         }
         
         if (fullAddress.isEmpty()) {
             showToast("Full address is required");
+            resetSaveButton();
             return;
         }
         
         if (dob.isEmpty()) {
             showToast("Date of birth is required");
+            resetSaveButton();
             return;
+        }
+        
+        // Validate date of birth is not in the future
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault());
+            Date dobDate = sdf.parse(dob);
+            Date today = new Date();
+            
+            if (dobDate != null && dobDate.after(today)) {
+                showToast("Date of birth cannot be in the future");
+                if (inputDob != null && inputDob.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                    ((com.google.android.material.textfield.TextInputLayout) inputDob.getParent())
+                        .setError("Date of birth cannot be in the future");
+                }
+                resetSaveButton();
+                return;
+            }
+        } catch (ParseException e) {
+            showToast("Invalid date of birth format");
+            if (inputDob != null && inputDob.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputDob.getParent())
+                    .setError("Invalid date format");
+            }
+            resetSaveButton();
+            return;
+        }
+        
+        // For existing patients, if birth place is empty but field is disabled, try to get from database
+        if (birthPlace.isEmpty() && isExistingPatient && existingPatientId != null && databaseHelper != null) {
+            com.example.h_cas.models.Patient existingPatient = databaseHelper.getPatientById(existingPatientId);
+            if (existingPatient != null && existingPatient.getBirthPlace() != null && !existingPatient.getBirthPlace().isEmpty()) {
+                birthPlace = existingPatient.getBirthPlace();
+                android.util.Log.d("PatientRegistration", "✅ Retrieved birth place from database: '" + birthPlace + "'");
+                // Update the input field for display
+                if (inputBirthPlace != null) {
+                    inputBirthPlace.setText(birthPlace);
+                }
+            }
         }
         
         if (birthPlace.isEmpty()) {
             showToast("Birth place is required");
+            if (inputBirthPlace != null && inputBirthPlace.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputBirthPlace.getParent())
+                    .setError("Birth place is required");
+            }
+            resetSaveButton();
             return;
         }
         
         if (gender.isEmpty()) {
             showToast("Gender is required");
+            resetSaveButton();
             return;
         }
         
         if (age.isEmpty()) {
             showToast("Age is required");
+            resetSaveButton();
             return;
         }
         
         if (phoneNumber.isEmpty()) {
             showToast("Cellphone number is required");
+            resetSaveButton();
             return;
         }
         
@@ -1009,6 +1522,7 @@ public class PatientRegistrationFragment extends Fragment {
                 ((com.google.android.material.textfield.TextInputLayout) inputPhoneNumber.getParent())
                     .setError("Phone number must start with 09");
             }
+            resetSaveButton();
             return;
         }
         
@@ -1018,22 +1532,186 @@ public class PatientRegistrationFragment extends Fragment {
                 ((com.google.android.material.textfield.TextInputLayout) inputPhoneNumber.getParent())
                     .setError("Phone number must be exactly 11 digits");
             }
+            resetSaveButton();
             return;
         }
         
         if (email.isEmpty()) {
             showToast("Email address is required");
+            resetSaveButton();
             return;
         }
         
-        // Validate email format
-        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+        // Validate email format with stricter validation
+        email = email.trim().toLowerCase();
+        String emailPattern = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
+        
+        if (!email.matches(emailPattern)) {
             showToast("Please enter a valid email address");
             if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
                 ((com.google.android.material.textfield.TextInputLayout) inputEmail.getParent())
                     .setError("Please enter a valid email address");
             }
+            resetSaveButton();
             return;
+        }
+        
+        // Additional validation: Check for proper email structure
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 0 || atIndex >= email.length() - 1) {
+            showToast("Please enter a valid email address");
+            if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputEmail.getParent())
+                    .setError("Please enter a valid email address");
+            }
+            resetSaveButton();
+            return;
+        }
+        
+        String localPart = email.substring(0, atIndex);
+        String domainPart = email.substring(atIndex + 1);
+        
+        // Validate local part
+        if (localPart.isEmpty() || localPart.length() > 64 ||
+            localPart.startsWith(".") || localPart.endsWith(".") ||
+            localPart.startsWith("_") || localPart.endsWith("_") ||
+            localPart.startsWith("-") || localPart.endsWith("-")) {
+            showToast("Email address format is invalid");
+            if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputEmail.getParent())
+                    .setError("Email address format is invalid");
+            }
+            resetSaveButton();
+            return;
+        }
+        
+        // Validate domain part
+        if (domainPart.isEmpty() || domainPart.length() > 253 ||
+            !domainPart.contains(".") ||
+            domainPart.startsWith(".") || domainPart.endsWith(".") ||
+            domainPart.startsWith("-") || domainPart.endsWith("-")) {
+            showToast("Email domain is invalid");
+            if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputEmail.getParent())
+                    .setError("Email domain is invalid");
+            }
+            resetSaveButton();
+            return;
+        }
+        
+        // Validate TLD
+        String[] domainParts = domainPart.split("\\.");
+        if (domainParts.length < 2 || domainParts[domainParts.length - 1].length() < 2) {
+            showToast("Email must have a valid top-level domain (e.g., .com, .org)");
+            if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputEmail.getParent())
+                    .setError("Email must have a valid top-level domain");
+            }
+            resetSaveButton();
+            return;
+        }
+        
+        // Check if email has been validated and exists
+        if (!isEmailValid || !isEmailExisting) {
+            // If email is still being validated, wait a bit
+            if (isEmailValidating) {
+                showToast("Please wait while we verify your email address");
+                resetSaveButton();
+                return;
+            }
+            
+            // If format is valid but existence hasn't been checked yet, trigger validation
+            if (isEmailValid && !isEmailValidating) {
+                // Show loading state
+                buttonSavePatient.setEnabled(false);
+                buttonSavePatient.setText("Validating email...");
+                
+                // Trigger validation
+                validateEmailExists(email);
+                
+                // Wait for validation to complete (will be handled in callback)
+                // Set up a timeout to re-enable button if validation takes too long
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    if (isEmailValidating) {
+                        resetSaveButton();
+                        showToast("Email validation is taking longer than expected. Please try again.");
+                    }
+                }, 15000); // 15 second timeout
+                
+                return;
+            }
+            
+            // Email validation failed
+            String errorMsg = "Email account does not exist or is invalid. Please enter a valid email address.";
+            showToast(errorMsg);
+            if (inputEmail != null && inputEmail.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                ((com.google.android.material.textfield.TextInputLayout) inputEmail.getParent())
+                    .setError(errorMsg);
+            }
+            resetSaveButton();
+            return;
+        }
+        
+        // Email is valid and exists, proceed with saving
+        proceedWithSave();
+    }
+    
+    /**
+     * Proceeds with saving patient data after email validation passes
+     */
+    private void proceedWithSave() {
+        // Show saving state
+        buttonSavePatient.setEnabled(false);
+        buttonSavePatient.setText("Saving...");
+        
+        // Collect all form data again (in case user changed something)
+        String firstName = getText(inputFirstName);
+        String lastName = getText(inputLastName);
+        String suffix = getText(inputSuffix);
+        String fullAddress = getText(inputFullAddress);
+        String dob = getText(inputDob);
+        String birthPlace = getText(inputBirthPlace);
+        String gender = getText(inputGender);
+        String age = getText(inputAge);
+        String phoneNumber = getText(inputPhoneNumber);
+        String email = getText(inputEmail);
+        String allergies = getText(inputAllergies);
+        String medications = getText(inputMedications);
+        String medicalHistory = getText(inputMedicalHistory);
+        
+        // Vital Signs Diagnostic Data
+        String pulseRate = getText(inputPulseRate);
+        String bloodPressure = getText(inputBloodPressure);
+        String temperature = getText(inputTemperature);
+        String bloodSugar = getText(inputBloodSugar);
+        String painScale = getText(inputPainScale);
+        String symptomsDescription = getText(inputSymptomsDescription);
+        
+        // Emergency Contact
+        String emergencyName = getText(inputEmergencyName);
+        String emergencyPhone = getText(inputEmergencyPhone);
+        
+        // Validate emergency phone number format (if provided)
+        if (!emergencyPhone.isEmpty()) {
+            if (!emergencyPhone.startsWith("09")) {
+                showToast("Emergency phone number must start with 09");
+                if (inputEmergencyPhone != null && inputEmergencyPhone.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                    ((com.google.android.material.textfield.TextInputLayout) inputEmergencyPhone.getParent())
+                        .setError("Phone number must start with 09");
+                }
+                resetSaveButton();
+                return;
+            }
+            
+            if (emergencyPhone.length() != 11) {
+                showToast("Emergency phone number must be exactly 11 digits");
+                if (inputEmergencyPhone != null && inputEmergencyPhone.getParent() instanceof com.google.android.material.textfield.TextInputLayout) {
+                    ((com.google.android.material.textfield.TextInputLayout) inputEmergencyPhone.getParent())
+                        .setError("Phone number must be exactly 11 digits");
+                }
+                resetSaveButton();
+                return;
+            }
         }
 
         // Create and populate patient object
@@ -1082,6 +1760,28 @@ public class PatientRegistrationFragment extends Fragment {
         patient.setEmergencyContactName(emergencyName);
         patient.setEmergencyContactPhone(emergencyPhone);
         
+        // Debug logging to verify data is being captured from form inputs
+        android.util.Log.d("PatientRegistration", "📋 Form input values (before setting to patient object):");
+        android.util.Log.d("PatientRegistration", "   Age (form): '" + age + "'");
+        android.util.Log.d("PatientRegistration", "   Birth Place (form): '" + birthPlace + "'");
+        android.util.Log.d("PatientRegistration", "   Full Name (form): '" + fullName + "'");
+        android.util.Log.d("PatientRegistration", "   Allergies (form): '" + allergies + "'");
+        android.util.Log.d("PatientRegistration", "   Medications (form): '" + medications + "'");
+        android.util.Log.d("PatientRegistration", "   Medical History (form): '" + medicalHistory + "'");
+        android.util.Log.d("PatientRegistration", "   Emergency Name (form): '" + emergencyName + "'");
+        android.util.Log.d("PatientRegistration", "   Emergency Phone (form): '" + emergencyPhone + "'");
+        
+        // Verify values are actually set in patient object (read back immediately)
+        android.util.Log.d("PatientRegistration", "📋 Patient object values (after setting):");
+        android.util.Log.d("PatientRegistration", "   Age (patient.getAge()): '" + patient.getAge() + "'");
+        android.util.Log.d("PatientRegistration", "   Birth Place (patient.getBirthPlace()): '" + patient.getBirthPlace() + "'");
+        android.util.Log.d("PatientRegistration", "   Full Name (patient.getFullName()): '" + patient.getFullName() + "'");
+        android.util.Log.d("PatientRegistration", "   Allergies (patient.getAllergies()): '" + patient.getAllergies() + "'");
+        android.util.Log.d("PatientRegistration", "   Medications (patient.getMedications()): '" + patient.getMedications() + "'");
+        android.util.Log.d("PatientRegistration", "   Medical History (patient.getMedicalHistory()): '" + patient.getMedicalHistory() + "'");
+        android.util.Log.d("PatientRegistration", "   Emergency Name (patient.getEmergencyContactName()): '" + patient.getEmergencyContactName() + "'");
+        android.util.Log.d("PatientRegistration", "   Emergency Phone (patient.getEmergencyContactPhone()): '" + patient.getEmergencyContactPhone() + "'");
+        
         // NFC UID (if scanned)
         if (scannedNfcUid != null && !scannedNfcUid.isEmpty()) {
             patient.setNfcUid(scannedNfcUid);
@@ -1110,38 +1810,60 @@ public class PatientRegistrationFragment extends Fragment {
         }
 
         boolean success = false;
-        if (isExistingPatient && existingPatientId != null) {
-            // Update existing patient with new vital signs
-            success = databaseHelper.updatePatient(patient);
-            if (success) {
-                showToast("✅ Patient updated successfully with new vital signs!");
+        try {
+            // Build payload map from form values BEFORE saving to database
+            Map<String, Object> formDataPayload = buildFormDataPayload(patient, 
+                firstName, lastName, suffix, fullAddress, dob, birthPlace, gender, age,
+                phoneNumber, email, allergies, medications, medicalHistory,
+                pulseRate, bloodPressure, temperature, bloodSugar, painScale, symptomsDescription,
+                emergencyName, emergencyPhone, fullName);
+            
+            if (isExistingPatient && existingPatientId != null) {
+                // Update existing patient with new vital signs
+                // NOTE: We'll sync to Firebase directly, so disable automatic sync from SQLite
+                success = databaseHelper.updatePatient(patient);
+                if (success) {
+                    showToast("✅ Patient updated successfully with new vital signs!");
+                } else {
+                    showToast("Failed to update patient");
+                    resetSaveButton();
+                    return;
+                }
             } else {
-                showToast("Failed to update patient");
+                // Add new patient
+                // NOTE: We'll sync to Firebase directly, so we need to prevent the automatic sync
+                // from HCasDatabaseHelper.addPatient() which uses incomplete data
+                // We'll save to SQLite first, then sync complete data to Firebase
+                success = databaseHelper.addPatient(patient);
+                if (success) {
+                    showToast("✅ Patient registered successfully!");
+                } else {
+                    showToast("Failed to save patient");
+                    resetSaveButton();
+                    return;
+                }
             }
-        } else {
-            // Add new patient
-            success = databaseHelper.addPatient(patient);
+            
             if (success) {
-                showToast("✅ Patient registered successfully!");
-            } else {
-                showToast("Failed to save patient");
+                // Push COMPLETE data to Firebase directly (this will overwrite any incomplete sync)
+                // This ensures all fields are saved, including vital signs
+                android.util.Log.d("PatientRegistration", "🔄 Syncing COMPLETE patient data to Firebase...");
+                syncPatientToFirebase(patient, formDataPayload);
+                
+                // Wait a bit to ensure Firebase write completes before clearing form
+                // This prevents the background sync from HCasDatabaseHelper from overwriting
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    clearForm();
+                }, 500); // 500ms delay to ensure Firebase write completes
+                
+                // Stay on registration screen - do not navigate away
+                // Reset button state after successful save
+                resetSaveButton();
             }
-        }
-        
-        if (success) {
-            // Push to Firebase to ensure real-time database stays in sync
-            syncPatientToFirebase(patient);
-            clearForm();
-            // Navigate to Patient Monitoring after registration
-            if (getActivity() instanceof NurseDashboardActivity) {
-                NurseDashboardActivity activity = (NurseDashboardActivity) getActivity();
-                activity.getSupportFragmentManager()
-                        .beginTransaction()
-                        .replace(R.id.fragmentContainer, new PatientMonitoringFragment())
-                        .commit();
-                // Update toolbar title
-                activity.getSupportActionBar().setTitle("Monitoring");
-            }
+        } catch (Exception e) {
+            android.util.Log.e("PatientRegistration", "❌ Error saving patient: " + e.getMessage(), e);
+            showToast("An error occurred while saving patient. Please try again.");
+            resetSaveButton();
         }
     }
 
@@ -1190,6 +1912,82 @@ public class PatientRegistrationFragment extends Fragment {
         inputEmergencyPhone.setText("");
     }
 
+    /**
+     * Helper method to get value or empty string (never null)
+     */
+    private String getValueOrEmpty(String value) {
+        return value != null ? value : "";
+    }
+    
+    /**
+     * Build payload map from form data values to ensure all fields are included
+     */
+    private Map<String, Object> buildFormDataPayload(com.example.h_cas.models.Patient patient, 
+            String firstName, String lastName, String suffix, String fullAddress,
+            String dob, String birthPlace, String gender, String age,
+            String phoneNumber, String email, String allergies, String medications, String medicalHistory,
+            String pulseRate, String bloodPressure, String temperature, String bloodSugar, 
+            String painScale, String symptomsDescription,
+            String emergencyName, String emergencyPhone, String fullName) {
+        
+        Map<String, Object> payload = new HashMap<>();
+        
+        // Personal Information
+        payload.put("patient_id", getValueOrEmpty(patient.getPatientId()));
+        payload.put("first_name", getValueOrEmpty(firstName));
+        payload.put("last_name", getValueOrEmpty(lastName));
+        payload.put("full_name", getValueOrEmpty(fullName));
+        payload.put("suffix", getValueOrEmpty(suffix));
+        payload.put("date_of_birth", getValueOrEmpty(dob));
+        payload.put("birth_place", getValueOrEmpty(birthPlace));
+        payload.put("gender", getValueOrEmpty(gender));
+        payload.put("age", getValueOrEmpty(age));
+        
+        // Contact Information
+        payload.put("address", getValueOrEmpty(fullAddress));
+        payload.put("full_address", getValueOrEmpty(fullAddress));
+        payload.put("phone", getValueOrEmpty(phoneNumber));
+        payload.put("phone_number", getValueOrEmpty(phoneNumber));
+        payload.put("email", getValueOrEmpty(email));
+        
+        // Health Information
+        payload.put("allergies", getValueOrEmpty(allergies));
+        payload.put("medications", getValueOrEmpty(medications));
+        payload.put("medical_history", getValueOrEmpty(medicalHistory));
+        
+        // Vital Signs
+        payload.put("pulse_rate", getValueOrEmpty(pulseRate));
+        payload.put("blood_pressure", getValueOrEmpty(bloodPressure));
+        payload.put("temperature", getValueOrEmpty(temperature));
+        payload.put("blood_sugar", getValueOrEmpty(bloodSugar));
+        payload.put("pain_scale", getValueOrEmpty(painScale));
+        payload.put("symptoms_description", getValueOrEmpty(symptomsDescription));
+        
+        // Emergency Contact
+        payload.put("emergency_contact_name", getValueOrEmpty(emergencyName));
+        payload.put("emergency_contact_phone", getValueOrEmpty(emergencyPhone));
+        
+        // System Information
+        if (patient.getNfcUid() != null && !patient.getNfcUid().isEmpty()) {
+            payload.put("nfc_uid", patient.getNfcUid());
+        }
+        // Set patient_status = "on" for new patients (or when saving existing patient)
+        payload.put("patient_status", "on");
+        
+        // Log the payload being built
+        android.util.Log.d("PatientRegistration", "📦 Building payload from form data:");
+        android.util.Log.d("PatientRegistration", "   age: '" + getValueOrEmpty(age) + "'");
+        android.util.Log.d("PatientRegistration", "   birth_place: '" + getValueOrEmpty(birthPlace) + "'");
+        android.util.Log.d("PatientRegistration", "   full_name: '" + getValueOrEmpty(fullName) + "'");
+        android.util.Log.d("PatientRegistration", "   allergies: '" + getValueOrEmpty(allergies) + "'");
+        android.util.Log.d("PatientRegistration", "   medications: '" + getValueOrEmpty(medications) + "'");
+        android.util.Log.d("PatientRegistration", "   medical_history: '" + getValueOrEmpty(medicalHistory) + "'");
+        android.util.Log.d("PatientRegistration", "   emergency_contact_name: '" + getValueOrEmpty(emergencyName) + "'");
+        android.util.Log.d("PatientRegistration", "   emergency_contact_phone: '" + getValueOrEmpty(emergencyPhone) + "'");
+        
+        return payload;
+    }
+    
     private void showToast(String message) {
         android.widget.Toast.makeText(getContext(), message, android.widget.Toast.LENGTH_SHORT).show();
     }
@@ -1208,47 +2006,224 @@ public class PatientRegistrationFragment extends Fragment {
     /**
      * Directly sync the patient to Firebase Realtime Database after local insert.
      * This ensures newly registered patients immediately appear in the cloud DB.
+     * @param patient The patient object with system information
+     * @param formDataPayload The payload map built directly from form fields to ensure all data is included
      */
-    private void syncPatientToFirebase(com.example.h_cas.models.Patient patient) {
+    /**
+     * Sync patient to Firebase from Patient object (for existing patients loaded from SQLite)
+     */
+    private void syncPatientToFirebaseFromPatient(com.example.h_cas.models.Patient patient) {
+        if (patient == null || patient.getPatientId() == null || patient.getPatientId().isEmpty()) {
+            android.util.Log.w("PatientRegistration", "⚠️ Cannot sync patient to Firebase: patient or patient ID is null");
+            return;
+        }
+        
         try {
-            FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
-            DatabaseReference patientRef = database.getReference("patients").child(patient.getPatientId());
-            patientRef.keepSynced(false);
-
+            // Build payload from Patient object
             Map<String, Object> payload = new HashMap<>();
-            payload.put("patient_id", patient.getPatientId());
-            payload.put("first_name", patient.getFirstName());
-            payload.put("last_name", patient.getLastName());
-            payload.put("full_name", patient.getFullName());
-            payload.put("suffix", patient.getSuffix());
-            payload.put("date_of_birth", patient.getDateOfBirth());
-            payload.put("birth_place", patient.getBirthPlace());
-            payload.put("gender", patient.getGender());
-            payload.put("age", patient.getAge());
-            payload.put("address", patient.getFullAddress());
-            payload.put("full_address", patient.getFullAddress());
-            payload.put("phone", patient.getPhoneNumber());
-            payload.put("phone_number", patient.getPhoneNumber());
-            payload.put("email", patient.getEmail());
-            payload.put("allergies", patient.getAllergies());
-            payload.put("medications", patient.getMedications());
-            payload.put("medical_history", patient.getMedicalHistory());
-            payload.put("pulse_rate", patient.getPulseRate());
-            payload.put("blood_pressure", patient.getBloodPressure());
-            payload.put("temperature", patient.getTemperature());
-            payload.put("blood_sugar", patient.getBloodSugar());
-            payload.put("pain_scale", patient.getPainScale());
-            payload.put("symptoms_description", patient.getSymptomsDescription());
-            payload.put("emergency_contact_name", patient.getEmergencyContactName());
-            payload.put("emergency_contact_phone", patient.getEmergencyContactPhone());
-            payload.put("nfc_uid", patient.getNfcUid());
+            payload.put("patient_id", getValueOrEmpty(patient.getPatientId()));
+            payload.put("first_name", getValueOrEmpty(patient.getFirstName()));
+            payload.put("last_name", getValueOrEmpty(patient.getLastName()));
+            payload.put("full_name", getValueOrEmpty(patient.getFullName()));
+            payload.put("suffix", getValueOrEmpty(patient.getSuffix()));
+            payload.put("date_of_birth", getValueOrEmpty(patient.getDateOfBirth()));
+            payload.put("birth_place", getValueOrEmpty(patient.getBirthPlace()));
+            payload.put("gender", getValueOrEmpty(patient.getGender()));
+            payload.put("age", getValueOrEmpty(patient.getAge()));
+            payload.put("address", getValueOrEmpty(patient.getFullAddress()));
+            payload.put("full_address", getValueOrEmpty(patient.getFullAddress()));
+            payload.put("phone", getValueOrEmpty(patient.getPhoneNumber()));
+            payload.put("phone_number", getValueOrEmpty(patient.getPhoneNumber()));
+            payload.put("email", getValueOrEmpty(patient.getEmail()));
+            payload.put("allergies", getValueOrEmpty(patient.getAllergies()));
+            payload.put("medications", getValueOrEmpty(patient.getMedications()));
+            payload.put("medical_history", getValueOrEmpty(patient.getMedicalHistory()));
+            payload.put("pulse_rate", getValueOrEmpty(patient.getPulseRate()));
+            payload.put("blood_pressure", getValueOrEmpty(patient.getBloodPressure()));
+            payload.put("temperature", getValueOrEmpty(patient.getTemperature()));
+            payload.put("blood_sugar", getValueOrEmpty(patient.getBloodSugar()));
+            payload.put("pain_scale", getValueOrEmpty(patient.getPainScale()));
+            payload.put("symptoms_description", getValueOrEmpty(patient.getSymptomsDescription()));
+            payload.put("emergency_contact_name", getValueOrEmpty(patient.getEmergencyContactName()));
+            payload.put("emergency_contact_phone", getValueOrEmpty(patient.getEmergencyContactPhone()));
+            payload.put("nfc_uid", getValueOrEmpty(patient.getNfcUid()));
             payload.put("created_date", patient.getCreatedDate() != null ? patient.getCreatedDate() : 
                 new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date()));
             payload.put("last_updated", System.currentTimeMillis());
+            // Set patient_status = "on" when saving existing patient (makes them available for prescription again)
+            payload.put("patient_status", "on");
+            
+            // Sync to Firebase
+            syncPatientToFirebase(patient, payload);
+        } catch (Exception e) {
+            android.util.Log.e("PatientRegistration", "❌ Error syncing patient to Firebase: " + e.getMessage(), e);
+        }
+    }
+    
+    private void syncPatientToFirebase(com.example.h_cas.models.Patient patient, Map<String, Object> formDataPayload) {
+        try {
+            FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
+            // Use "patients" path consistently
+            DatabaseReference patientRef = database.getReference("patients").child(patient.getPatientId());
+            patientRef.keepSynced(false);
 
-            patientRef.updateChildren(payload)
-                    .addOnSuccessListener(unused -> Log.d("PatientRegistration", "Patient synced to Firebase"))
-                    .addOnFailureListener(e -> Log.e("PatientRegistration", "Firebase sync failed", e));
+            // Use the payload passed from proceedWithSave (built directly from form fields)
+            Map<String, Object> payload = new HashMap<>(formDataPayload);
+            
+            // Log payload values to verify what's being sent
+            android.util.Log.d("PatientRegistration", "📤 Payload values being sent to Firebase:");
+            android.util.Log.d("PatientRegistration", "   age: '" + payload.get("age") + "'");
+            android.util.Log.d("PatientRegistration", "   birth_place: '" + payload.get("birth_place") + "'");
+            android.util.Log.d("PatientRegistration", "   full_name: '" + payload.get("full_name") + "'");
+            android.util.Log.d("PatientRegistration", "   allergies: '" + payload.get("allergies") + "'");
+            android.util.Log.d("PatientRegistration", "   medications: '" + payload.get("medications") + "'");
+            android.util.Log.d("PatientRegistration", "   medical_history: '" + payload.get("medical_history") + "'");
+            android.util.Log.d("PatientRegistration", "   emergency_contact_name: '" + payload.get("emergency_contact_name") + "'");
+            android.util.Log.d("PatientRegistration", "   emergency_contact_phone: '" + payload.get("emergency_contact_phone") + "'");
+            android.util.Log.d("PatientRegistration", "📤 Syncing patient to Firebase: " + patient.getPatientId());
+            // Check if patient exists first to preserve created_date
+            patientRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                @Override
+                public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                    boolean patientExists = snapshot.exists();
+                    boolean dataChanged = false;
+                    
+                    if (!patientExists) {
+                        // New patient - set created_date and last_updated
+                        payload.put("created_date", patient.getCreatedDate() != null ? patient.getCreatedDate() : 
+                            new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date()));
+                        dataChanged = true; // New patient always counts as change
+                    } else {
+                        // Patient exists - preserve existing created_date and check if data changed
+                        Map<String, Object> existingData = (Map<String, Object>) snapshot.getValue();
+                        if (existingData != null) {
+                            if (existingData.containsKey("created_date")) {
+                                payload.put("created_date", existingData.get("created_date"));
+                            }
+                            
+                            // Compare data to detect actual changes (exclude last_updated and created_date from comparison)
+                            for (Map.Entry<String, Object> entry : payload.entrySet()) {
+                                String key = entry.getKey();
+                                if (!key.equals("last_updated") && !key.equals("created_date")) {
+                                    Object newValue = entry.getValue();
+                                    Object oldValue = existingData.get(key);
+                                    
+                                    // Compare values (handle null cases)
+                                    if (newValue == null && oldValue != null) {
+                                        dataChanged = true;
+                                        break;
+                                    } else if (newValue != null && !newValue.equals(oldValue)) {
+                                        dataChanged = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            // No existing data - treat as new
+                            dataChanged = true;
+                        }
+                    }
+                    
+                    // Always update to ensure all fields are saved (use setValue for complete overwrite)
+                    payload.put("last_updated", System.currentTimeMillis());
+                    
+                    // Log final payload before sending to Firebase
+                    android.util.Log.d("PatientRegistration", "📦 Final payload before Firebase setValue():");
+                    android.util.Log.d("PatientRegistration", "   age: '" + payload.get("age") + "'");
+                    android.util.Log.d("PatientRegistration", "   birth_place: '" + payload.get("birth_place") + "'");
+                    android.util.Log.d("PatientRegistration", "   full_name: '" + payload.get("full_name") + "'");
+                    android.util.Log.d("PatientRegistration", "   allergies: '" + payload.get("allergies") + "'");
+                    android.util.Log.d("PatientRegistration", "   medications: '" + payload.get("medications") + "'");
+                    android.util.Log.d("PatientRegistration", "   medical_history: '" + payload.get("medical_history") + "'");
+                    android.util.Log.d("PatientRegistration", "   emergency_contact_name: '" + payload.get("emergency_contact_name") + "'");
+                    android.util.Log.d("PatientRegistration", "   emergency_contact_phone: '" + payload.get("emergency_contact_phone") + "'");
+                    android.util.Log.d("PatientRegistration", "   Total payload size: " + payload.size() + " fields");
+                    
+                    if (!patientExists) {
+                        // New patient - use setValue() to ensure ALL fields are saved
+                        android.util.Log.d("PatientRegistration", "🆕 New patient - using setValue() to save all fields");
+                        patientRef.setValue(payload)
+                            .addOnSuccessListener(unused -> {
+                                android.util.Log.d("PatientRegistration", "✅ Patient synced to Firebase successfully (new patient)");
+                                // Verify the data was actually saved by reading it back
+                                patientRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                                    @Override
+                                    public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                                        if (snapshot.exists()) {
+                                            android.util.Log.d("PatientRegistration", "✅ Verification - Data saved to Firebase:");
+                                            android.util.Log.d("PatientRegistration", "   age: '" + snapshot.child("age").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   birth_place: '" + snapshot.child("birth_place").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   full_name: '" + snapshot.child("full_name").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   allergies: '" + snapshot.child("allergies").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   medications: '" + snapshot.child("medications").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   medical_history: '" + snapshot.child("medical_history").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   emergency_contact_name: '" + snapshot.child("emergency_contact_name").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   emergency_contact_phone: '" + snapshot.child("emergency_contact_phone").getValue() + "'");
+                                        }
+                                    }
+                                    
+                                    @Override
+                                    public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                                        android.util.Log.e("PatientRegistration", "❌ Error verifying saved data", error.toException());
+                                    }
+                                });
+                            })
+                            .addOnFailureListener(e -> {
+                                android.util.Log.e("PatientRegistration", "❌ Firebase sync failed (new patient)", e);
+                            });
+                    } else {
+                        // Existing patient - use setValue() to ensure ALL fields are updated (not just changed ones)
+                        android.util.Log.d("PatientRegistration", "🔄 Existing patient - using setValue() to update all fields");
+                        patientRef.setValue(payload)
+                            .addOnSuccessListener(unused -> {
+                                android.util.Log.d("PatientRegistration", "✅ Patient synced to Firebase successfully (updated)");
+                                // Verify the data was actually saved by reading it back
+                                patientRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                                    @Override
+                                    public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                                        if (snapshot.exists()) {
+                                            android.util.Log.d("PatientRegistration", "✅ Verification - Data updated in Firebase:");
+                                            android.util.Log.d("PatientRegistration", "   age: '" + snapshot.child("age").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   birth_place: '" + snapshot.child("birth_place").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   full_name: '" + snapshot.child("full_name").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   allergies: '" + snapshot.child("allergies").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   medications: '" + snapshot.child("medications").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   medical_history: '" + snapshot.child("medical_history").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   emergency_contact_name: '" + snapshot.child("emergency_contact_name").getValue() + "'");
+                                            android.util.Log.d("PatientRegistration", "   emergency_contact_phone: '" + snapshot.child("emergency_contact_phone").getValue() + "'");
+                                        }
+                                    }
+                                    
+                                    @Override
+                                    public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                                        android.util.Log.e("PatientRegistration", "❌ Error verifying saved data", error.toException());
+                                    }
+                                });
+                            })
+                            .addOnFailureListener(e -> {
+                                android.util.Log.e("PatientRegistration", "❌ Firebase sync failed (update)", e);
+                            });
+                    }
+                }
+                
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    android.util.Log.e("PatientRegistration", "❌ Error checking patient existence", error.toException());
+                    // Fallback: assume new patient and use setValue() to ensure all fields are saved
+                    payload.put("created_date", patient.getCreatedDate() != null ? patient.getCreatedDate() : 
+                        new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date()));
+                    payload.put("last_updated", System.currentTimeMillis());
+                    
+                    android.util.Log.w("PatientRegistration", "⚠️ Using fallback - saving with setValue()");
+                    patientRef.setValue(payload)
+                        .addOnSuccessListener(unused -> {
+                            android.util.Log.d("PatientRegistration", "✅ Patient synced to Firebase (fallback)");
+                        })
+                        .addOnFailureListener(e -> {
+                            android.util.Log.e("PatientRegistration", "❌ Firebase sync failed (fallback)", e);
+                        });
+                }
+            });
         } catch (Exception e) {
             Log.e("PatientRegistration", "Error syncing patient to Firebase", e);
         }

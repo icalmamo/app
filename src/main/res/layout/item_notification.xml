@@ -7,6 +7,9 @@
     android:layout_marginEnd="8dp"
     android:layout_marginTop="4dp"
     android:layout_marginBottom="4dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
     app:cardCornerRadius="8dp"
     app:cardElevation="0dp"
     app:strokeWidth="0dp"
@@ -42,10 +45,13 @@
 
         <!-- Notification Content -->
         <LinearLayout
+            android:id="@+id/notificationContentLayout"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:clickable="true"
+            android:focusable="true">
 
             <TextView
                 android:id="@+id/notificationSender"

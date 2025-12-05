@@ -18,7 +18,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
-import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.database.FirebaseRTDBHelper;
 import com.example.h_cas.models.Patient;
 import com.example.h_cas.models.Prescription;
@@ -34,7 +33,6 @@ public class RegisteredPatientsFragment extends Fragment {
 
     private RecyclerView patientsRecyclerView;
     private TextView emptyStateTextView;
-    private HCasDatabaseHelper databaseHelper;
     private FirebaseRTDBHelper firebaseRTDBHelper;
     private PatientAdapter patientAdapter;
 
@@ -60,7 +58,6 @@ public class RegisteredPatientsFragment extends Fragment {
     }
 
     private void initializeDatabase() {
-        databaseHelper = new HCasDatabaseHelper(getContext());
         firebaseRTDBHelper = new FirebaseRTDBHelper(getContext());
     }
 
@@ -78,99 +75,59 @@ public class RegisteredPatientsFragment extends Fragment {
         emptyStateTextView.setVisibility(View.GONE);
         patientsRecyclerView.setVisibility(View.GONE);
         
-        android.util.Log.d("RegisteredPatients", "🔄 Loading patients...");
+        android.util.Log.d("RegisteredPatients", "🔄 Loading patients from Firebase ONLY...");
         
-        // Load patients from Firebase RTDB (primary source)
-        if (firebaseRTDBHelper != null) {
-            android.util.Log.d("RegisteredPatients", "📊 Fetching from Firebase RTDB...");
-            firebaseRTDBHelper.getAllPatients(patients -> {
-                android.util.Log.d("RegisteredPatients", "📊 Firebase callback received: " + (patients != null ? patients.size() : 0) + " patients");
-                
-                // Process on background thread
-                com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-                    // Filter out null patients and ensure valid data
-                    List<Patient> validPatients = new ArrayList<>();
-                    if (patients != null && !patients.isEmpty()) {
-                        for (Patient patient : patients) {
-                            if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
-                                validPatients.add(patient);
-                            }
-                        }
-                        android.util.Log.d("RegisteredPatients", "✅ Valid patients: " + validPatients.size() + " out of " + patients.size());
-                    } else {
-                        android.util.Log.w("RegisteredPatients", "⚠️ Firebase returned null or empty, falling back to SQLite");
-                        // Fallback to SQLite if Firebase returns empty
-                        if (databaseHelper != null) {
-                            List<Patient> sqlitePatients = databaseHelper.getAllPatients();
-                            if (sqlitePatients != null && !sqlitePatients.isEmpty()) {
-                                for (Patient patient : sqlitePatients) {
-                                    if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
-                                        validPatients.add(patient);
-                                    }
-                                }
-                                android.util.Log.d("RegisteredPatients", "📊 SQLite patients loaded: " + validPatients.size());
-                            }
-                        }
-                    }
-                    
-                    final List<Patient> finalPatients = validPatients;
-                    
-                    // Update UI on main thread
-                    com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                        if (getContext() == null || getView() == null) {
-                            android.util.Log.w("RegisteredPatients", "⚠️ Fragment detached, skipping UI update");
-                            return; // Fragment is detached
-                        }
-                        
-                        if (finalPatients.isEmpty()) {
-                            android.util.Log.d("RegisteredPatients", "📭 No patients found, showing empty state");
-                            emptyStateTextView.setVisibility(View.VISIBLE);
-                            patientsRecyclerView.setVisibility(View.GONE);
-                        } else {
-                            android.util.Log.d("RegisteredPatients", "✅ Displaying " + finalPatients.size() + " patients");
-                            emptyStateTextView.setVisibility(View.GONE);
-                            patientsRecyclerView.setVisibility(View.VISIBLE);
-                            patientAdapter.setPatients(finalPatients);
-                        }
-                    });
-                });
-            });
-        } else {
-            // Fallback to SQLite if Firebase not available
-            android.util.Log.w("RegisteredPatients", "⚠️ Firebase not available, using SQLite");
+        // Load patients ONLY from Firebase RTDB (no SQLite fallback)
+        if (firebaseRTDBHelper == null) {
+            android.util.Log.e("RegisteredPatients", "❌ FirebaseRTDBHelper is null - cannot load patients");
+            emptyStateTextView.setVisibility(View.VISIBLE);
+            patientsRecyclerView.setVisibility(View.GONE);
+            return;
+        }
+        
+        android.util.Log.d("RegisteredPatients", "📊 Fetching from Firebase RTDB (patient_status = 'on')...");
+        // Only fetch patients with patient_status = "on"
+        // Call getAllPatients with callback first, then filter status "on" as second parameter
+        firebaseRTDBHelper.getAllPatients(patients -> {
+            android.util.Log.d("RegisteredPatients", "📊 Firebase callback received: " + (patients != null ? patients.size() : 0) + " patients");
+            
+            // Process on background thread
             com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-                List<Patient> allPatients = new ArrayList<>();
-                if (databaseHelper != null) {
-                    List<Patient> sqlitePatients = databaseHelper.getAllPatients();
-                    if (sqlitePatients != null && !sqlitePatients.isEmpty()) {
-                        for (Patient patient : sqlitePatients) {
-                            if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
-                                allPatients.add(patient);
-                            }
+                // Filter out null patients and ensure valid data
+                List<Patient> validPatients = new ArrayList<>();
+                if (patients != null && !patients.isEmpty()) {
+                    for (Patient patient : patients) {
+                        if (patient != null && patient.getPatientId() != null && !patient.getPatientId().isEmpty()) {
+                            validPatients.add(patient);
                         }
-                        android.util.Log.d("RegisteredPatients", "📊 SQLite patients loaded: " + allPatients.size());
                     }
+                    android.util.Log.d("RegisteredPatients", "✅ Valid patients from Firebase: " + validPatients.size() + " out of " + patients.size());
+                } else {
+                    android.util.Log.d("RegisteredPatients", "📭 Firebase returned empty - no patients in database");
                 }
                 
-                final List<Patient> finalPatients = allPatients;
+                final List<Patient> finalPatients = validPatients;
                 
                 // Update UI on main thread
                 com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
                     if (getContext() == null || getView() == null) {
+                        android.util.Log.w("RegisteredPatients", "⚠️ Fragment detached, skipping UI update");
                         return; // Fragment is detached
                     }
                     
                     if (finalPatients.isEmpty()) {
+                        android.util.Log.d("RegisteredPatients", "📭 No patients found, showing empty state");
                         emptyStateTextView.setVisibility(View.VISIBLE);
                         patientsRecyclerView.setVisibility(View.GONE);
                     } else {
+                        android.util.Log.d("RegisteredPatients", "✅ Displaying " + finalPatients.size() + " patients from Firebase");
                         emptyStateTextView.setVisibility(View.GONE);
                         patientsRecyclerView.setVisibility(View.VISIBLE);
                         patientAdapter.setPatients(finalPatients);
                     }
                 });
             });
-        }
+        }, "on"); // Filter by patient_status = "on"
     }
 
     @Override

@@ -16,15 +16,18 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             app:boxStrokeColor="@color/primary_blue"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:hint="Medicine Name"
+            app:startIconDrawable="@drawable/ic_medical_services">
 
-            <com.google.android.material.textfield.TextInputEditText
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
                 android:id="@+id/medicineNameInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Medicine Name"
                 android:inputType="text"
-                android:maxLines="1" />
+                android:maxLines="1"
+                android:textSize="16sp"
+                android:completionThreshold="1" />
 
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -127,50 +130,31 @@
 
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Expiry Date and Price Row -->
-        <LinearLayout
+        <!-- Expiry Date -->
+        <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="16dp"
+            app:boxStrokeColor="@color/primary_blue"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:hint="Expiry Date"
+            app:startIconDrawable="@drawable/ic_calendar"
+            app:placeholderText="Select date">
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="0dp"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/expiryInput"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                app:boxStrokeColor="@color/primary_blue"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
+                android:inputType="none"
+                android:focusable="false"
+                android:clickable="true"
+                android:textSize="16sp"
+                android:minHeight="56dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:maxLines="1" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/expiryInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Expiry Date (YYYY-MM-DD)"
-                    android:inputType="date"
-                    android:maxLines="1" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                app:boxStrokeColor="@color/primary_blue"
-                style="@style/Widget.Material3.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/priceInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Price (₱)"
-                    android:inputType="numberDecimal"
-                    android:maxLines="1" />
-
-            </com.google.android.material.textfield.TextInputLayout>
-
-        </LinearLayout>
+        </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Supplier -->
         <com.google.android.material.textfield.TextInputLayout

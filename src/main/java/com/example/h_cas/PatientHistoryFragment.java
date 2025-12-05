@@ -44,6 +44,8 @@ public class PatientHistoryFragment extends Fragment {
     private List<PatientHistoryItem> allHistoryItems;
     private Map<String, List<Prescription>> prescriptionsByPatientId;
     private boolean searchEnabled = false;
+    private boolean isLoading = false; // Flag to prevent duplicate loading
+    private TextWatcher searchTextWatcher; // Store text watcher to enable/disable it
 
     @Nullable
     @Override
@@ -75,8 +77,11 @@ public class PatientHistoryFragment extends Fragment {
     
     private void setupSearchBar() {
         if (searchPatientInput != null) {
+            // Clear any existing text first
+            searchPatientInput.setText("");
+            
             // Always enable search functionality
-            searchPatientInput.addTextChangedListener(new TextWatcher() {
+            searchTextWatcher = new TextWatcher() {
                 @Override
                 public void beforeTextChanged(CharSequence s, int start, int count, int after) {
                     // Not needed
@@ -89,9 +94,15 @@ public class PatientHistoryFragment extends Fragment {
 
                 @Override
                 public void afterTextChanged(Editable s) {
-                    filterPatientHistory(s.toString().trim());
+                    // Only filter if we have data loaded
+                    if (allHistoryItems != null) {
+                        filterPatientHistory(s.toString().trim());
+                    } else {
+                        android.util.Log.d("PatientHistory", "⚠️ Search triggered but allHistoryItems is null, skipping filter");
+                    }
                 }
-            });
+            };
+            searchPatientInput.addTextChangedListener(searchTextWatcher);
             
             // If search is enabled from button, focus on search input and show keyboard
             if (searchEnabled) {
@@ -109,10 +120,20 @@ public class PatientHistoryFragment extends Fragment {
     }
     
     private void filterPatientHistory(String searchQuery) {
+        android.util.Log.d("PatientHistory", "🔍 Filtering with query: '" + searchQuery + "', allHistoryItems size: " + (allHistoryItems != null ? allHistoryItems.size() : 0));
+        
         if (searchQuery.isEmpty()) {
             // Show all prescription history items if search is empty
-            if (patientHistoryAdapter != null) {
-                patientHistoryAdapter.setPatientHistoryItems(allHistoryItems);
+            if (patientHistoryAdapter != null && allHistoryItems != null) {
+                android.util.Log.d("PatientHistory", "🔍 Showing all " + allHistoryItems.size() + " items (empty search)");
+                // Only update if the list is different to avoid unnecessary updates
+                if (patientHistoryAdapter.getItemCount() != allHistoryItems.size()) {
+                    patientHistoryAdapter.setPatientHistoryItems(allHistoryItems);
+                } else {
+                    android.util.Log.d("PatientHistory", "🔍 Adapter already has " + allHistoryItems.size() + " items, skipping update");
+                }
+            } else {
+                android.util.Log.w("PatientHistory", "⚠️ Cannot show all items - adapter or allHistoryItems is null");
             }
             updateEmptyState(allHistoryItems == null || allHistoryItems.isEmpty());
             return;
@@ -130,7 +151,17 @@ public class PatientHistoryFragment extends Fragment {
         
         for (PatientHistoryItem historyItem : allHistoryItems) {
             Patient patient = historyItem.getPatient();
+            
+            // If patient is null, still include it if search is empty or matches patient ID from prescription
             if (patient == null) {
+                // For null patients, try to match by prescription data if available
+                boolean matchesNull = searchQuery.isEmpty(); // Always show if search is empty
+                if (!matchesNull && historyItem.getLastMedication() != null) {
+                    matchesNull = historyItem.getLastMedication().toLowerCase().contains(queryLower);
+                }
+                if (matchesNull) {
+                    filteredItems.add(historyItem);
+                }
                 continue;
             }
             
@@ -206,7 +237,18 @@ public class PatientHistoryFragment extends Fragment {
                 Prescription latestPrescription = patientPrescriptions.get(0);
                 historyItem.setPrescriptionCount(patientPrescriptions.size());
                 historyItem.setLastPrescriptionDate(latestPrescription.getCreatedDate());
-                historyItem.setLastMedication(latestPrescription.getMedication());
+                
+                // Collect all unique medications from all prescriptions
+                List<String> allMedications = new ArrayList<>();
+                for (Prescription p : patientPrescriptions) {
+                    if (p.getMedication() != null && !p.getMedication().isEmpty() && !allMedications.contains(p.getMedication())) {
+                        allMedications.add(p.getMedication());
+                    }
+                }
+                // Join all medications with comma
+                String medicationsText = allMedications.isEmpty() ? "N/A" : String.join(", ", allMedications);
+                historyItem.setLastMedication(medicationsText);
+                
                 historyItem.setLastDoctor(latestPrescription.getDoctorName());
             } else {
                 // Patient has no prescriptions
@@ -246,59 +288,154 @@ public class PatientHistoryFragment extends Fragment {
 
     private void setupRecyclerView() {
         patientHistoryAdapter = new PatientHistoryAdapter();
-        patientHistoryRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
+        patientHistoryRecyclerView.setLayoutManager(layoutManager);
         patientHistoryRecyclerView.setAdapter(patientHistoryAdapter);
+        
+        // Ensure RecyclerView is properly configured
+        patientHistoryRecyclerView.setHasFixedSize(false);
+        patientHistoryRecyclerView.setNestedScrollingEnabled(false);
+        
+        android.util.Log.d("PatientHistory", "✅ RecyclerView setup complete");
     }
 
     private void loadPatientHistory() {
+        // Prevent duplicate loading
+        if (isLoading) {
+            android.util.Log.d("PatientHistory", "⚠️ Already loading, skipping duplicate call");
+            return;
+        }
+        
+        isLoading = true;
+        android.util.Log.d("PatientHistory", "🔄 Starting to load patient history...");
+        
         // Load prescriptions from Firebase RTDB (more accurate and real-time)
         if (firebaseRTDBHelper != null) {
-            // First load all patients from Firebase, then load prescriptions
-            firebaseRTDBHelper.getAllPatients(patients -> {
-                // Create a map of patients by ID for quick lookup
-                Map<String, Patient> patientsMap = new HashMap<>();
-                for (Patient patient : patients) {
-                    if (patient != null && patient.getPatientId() != null) {
-                        patientsMap.put(patient.getPatientId(), patient);
-                    }
-                }
+            // Load prescriptions directly from history - don't wait for patients
+            // Since patients are removed from Firebase after prescription creation,
+            // we'll create patient objects from prescription data
+            android.util.Log.d("PatientHistory", "📥 Loading prescriptions from history...");
+            firebaseRTDBHelper.getAllPrescriptionsFromHistory(prescriptions -> {
+                android.util.Log.d("PatientHistory", "📥 Received " + (prescriptions != null ? prescriptions.size() : 0) + " prescriptions from history");
                 
-                // Now load prescriptions from Firebase
-                firebaseRTDBHelper.getAllPrescriptions(prescriptions -> {
-                    // Process prescriptions on background thread
-                    com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
-                        prescriptionsByPatientId = new HashMap<>();
+                // Create final copies for lambda expressions
+                final List<Prescription> finalPrescriptions = prescriptions != null ? prescriptions : new ArrayList<>();
+                
+                // Process prescriptions on background thread
+                com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
+                    prescriptionsByPatientId = new HashMap<>();
+                    
+                    // Group prescriptions by patient ID
+                    for (Prescription prescription : finalPrescriptions) {
+                        String patientId = prescription.getPatientId();
+                        if (patientId != null && !patientId.isEmpty()) {
+                            if (!prescriptionsByPatientId.containsKey(patientId)) {
+                                prescriptionsByPatientId.put(patientId, new ArrayList<>());
+                            }
+                            prescriptionsByPatientId.get(patientId).add(prescription);
+                        }
+                    }
+                    
+                    android.util.Log.d("PatientHistory", "📥 Grouped prescriptions by patient ID. Total patients: " + prescriptionsByPatientId.size());
+                    
+                    // Load patients with patient_status = "off" from Firebase (existing patients)
+                    android.util.Log.d("PatientHistory", "📥 Loading patients with patient_status = 'off' from Firebase...");
+                    // Call getAllPatients with callback first, then filter status "off" as second parameter
+                    firebaseRTDBHelper.getAllPatients(firebasePatients -> {
+                        android.util.Log.d("PatientHistory", "📥 Loaded " + (firebasePatients != null ? firebasePatients.size() : 0) + " patients with status 'off' from Firebase");
                         
-                        // Group prescriptions by patient ID
-                        for (Prescription prescription : prescriptions) {
-                            String patientId = prescription.getPatientId();
-                            if (patientId != null && !patientId.isEmpty()) {
-                                if (!prescriptionsByPatientId.containsKey(patientId)) {
-                                    prescriptionsByPatientId.put(patientId, new ArrayList<>());
+                        // Create patients map from Firebase patients
+                        Map<String, Patient> patientsMap = new HashMap<>();
+                        if (firebasePatients != null) {
+                            for (Patient patient : firebasePatients) {
+                                if (patient != null && patient.getPatientId() != null) {
+                                    patientsMap.put(patient.getPatientId(), patient);
+                                    android.util.Log.d("PatientHistory", "✅ Added patient from Firebase: " + patient.getPatientId());
                                 }
-                                prescriptionsByPatientId.get(patientId).add(prescription);
                             }
                         }
                         
-                        // Load ONLY patients with prescription history from Firebase
-                        List<PatientHistoryItem> historyItems = processPrescriptionsToHistoryItems(prescriptions, patientsMap);
+                        // Only use patients from Firebase - don't load from SQLite
+                        // This ensures we only show patients that exist in Firebase
+                        android.util.Log.d("PatientHistory", "📥 Using only Firebase patients (no SQLite fallback)");
+                        
+                        // Process prescriptions to history items with patients map
+                        List<PatientHistoryItem> historyItems = processPrescriptionsToHistoryItems(finalPrescriptions, patientsMap);
+                        
+                        android.util.Log.d("PatientHistory", "📥 Processed " + historyItems.size() + " history items");
                         
                         // Store all items for filtering (these are only patients with prescriptions)
                         allHistoryItems = historyItems;
                         
                         // Update UI on main thread
                         com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                            if (getContext() == null || getView() == null) {
-                                return; // Fragment is detached
+                        if (getContext() == null || getView() == null) {
+                            android.util.Log.w("PatientHistory", "⚠️ Fragment is detached, cannot update UI");
+                            return; // Fragment is detached
+                        }
+                        
+                        android.util.Log.d("PatientHistory", "📥 Updating UI with " + historyItems.size() + " items");
+                        updateEmptyState(historyItems.isEmpty());
+                        
+                        if (patientHistoryAdapter != null) {
+                            // Temporarily remove text watcher to prevent filter trigger
+                            if (searchPatientInput != null && searchTextWatcher != null) {
+                                searchPatientInput.removeTextChangedListener(searchTextWatcher);
                             }
                             
-                            updateEmptyState(historyItems.isEmpty());
+                            // Set items directly
+                            patientHistoryAdapter.setPatientHistoryItems(historyItems);
                             
-                            if (patientHistoryAdapter != null) {
-                                patientHistoryAdapter.setPatientHistoryItems(historyItems);
+                            // Clear search input and re-add text watcher
+                            if (searchPatientInput != null) {
+                                searchPatientInput.setText("");
+                                if (searchTextWatcher != null) {
+                                    searchPatientInput.addTextChangedListener(searchTextWatcher);
+                                }
                             }
+                            android.util.Log.d("PatientHistory", "✅ UI updated successfully with " + historyItems.size() + " items");
+                            android.util.Log.d("PatientHistory", "📊 Adapter item count: " + patientHistoryAdapter.getItemCount());
+                            
+                            // Force refresh the RecyclerView to ensure all items are displayed
+                            patientHistoryRecyclerView.post(() -> {
+                                // Request layout to ensure proper measurement
+                                patientHistoryRecyclerView.requestLayout();
+                                patientHistoryAdapter.notifyDataSetChanged();
+                                android.util.Log.d("PatientHistory", "🔄 Forced RecyclerView refresh, item count: " + patientHistoryAdapter.getItemCount());
+                                
+                                // Log each item being displayed
+                                for (int i = 0; i < patientHistoryAdapter.getItemCount(); i++) {
+                                    android.util.Log.d("PatientHistory", "📋 RecyclerView item " + i + " should be visible");
+                                }
+                                
+                                // Force invalidate to ensure redraw
+                                patientHistoryRecyclerView.invalidate();
+                                
+                                // Post another runnable to ensure layout happens after measurement
+                                patientHistoryRecyclerView.post(() -> {
+                                    android.util.Log.d("PatientHistory", "🔄 Second post - RecyclerView height: " + patientHistoryRecyclerView.getHeight() + ", measured height: " + patientHistoryRecyclerView.getMeasuredHeight());
+                                    android.util.Log.d("PatientHistory", "🔄 RecyclerView child count: " + patientHistoryRecyclerView.getChildCount());
+                                    
+                                    // Log each visible child
+                                    for (int i = 0; i < patientHistoryRecyclerView.getChildCount(); i++) {
+                                        View child = patientHistoryRecyclerView.getChildAt(i);
+                                        android.util.Log.d("PatientHistory", "👁️ Visible child " + i + ": " + (child != null ? "exists" : "null") + ", visibility: " + (child != null ? child.getVisibility() : "N/A") + ", height: " + (child != null ? child.getHeight() : "N/A"));
+                                    }
+                                    
+                                    // Force another layout pass to ensure all items are measured
+                                    patientHistoryRecyclerView.requestLayout();
+                                    
+                                    // Force another layout pass
+                                    patientHistoryRecyclerView.requestLayout();
+                                });
+                            });
+                        } else {
+                            android.util.Log.e("PatientHistory", "❌ Adapter is null!");
+                        }
+                        
+                        isLoading = false; // Reset loading flag
                         });
-                    });
+                    }, "off"); // Filter by patient_status = "off"
                 });
             });
         } else {
@@ -339,51 +476,137 @@ public class PatientHistoryFragment extends Fragment {
     private List<PatientHistoryItem> processPrescriptionsToHistoryItems(List<Prescription> prescriptions, Map<String, Patient> patientsMap) {
         List<PatientHistoryItem> historyItems = new ArrayList<>();
         
+        android.util.Log.d("PatientHistory", "📥 Processing " + prescriptions.size() + " prescriptions to history items");
+        android.util.Log.d("PatientHistory", "📥 Patients map size: " + (patientsMap != null ? patientsMap.size() : 0));
+        
         // Create a map to track unique patients and their prescription counts
         Map<String, PatientHistoryItem> patientMap = new HashMap<>();
         
         for (Prescription prescription : prescriptions) {
             String patientId = prescription.getPatientId();
+            
+            // Handle prescriptions without patient ID - use fallback
             if (patientId == null || patientId.isEmpty()) {
-                continue;
+                // Try to extract patient ID from prescription ID or use fallback
+                String prescriptionId = prescription.getPrescriptionId();
+                if (prescriptionId != null && prescriptionId.contains("_")) {
+                    // Try to extract patient ID from prescription ID format
+                    String[] parts = prescriptionId.split("_");
+                    if (parts.length > 0) {
+                        // Look for PAT prefix in parts
+                        for (String part : parts) {
+                            if (part.startsWith("PAT")) {
+                                patientId = part;
+                                prescription.setPatientId(patientId);
+                                android.util.Log.d("PatientHistory", "📥 Extracted patient ID from prescription ID: " + patientId);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // If still no patient ID, use fallback
+                if (patientId == null || patientId.isEmpty()) {
+                    patientId = "UNKNOWN_" + (prescription.getPrescriptionId() != null ? prescription.getPrescriptionId() : "UNKNOWN");
+                    prescription.setPatientId(patientId);
+                    android.util.Log.w("PatientHistory", "⚠️ Prescription has no patient ID, using fallback: " + patientId);
+                }
             }
             
+            android.util.Log.d("PatientHistory", "📥 Processing prescription: " + prescription.getPrescriptionId() + " for patient: " + patientId);
+            
             if (!patientMap.containsKey(patientId)) {
-                // Get patient details from Firebase map (already loaded from Firebase RTDB)
+                // Only get patient from Firebase map - don't use SQLite or create from prescription
+                // This ensures we only show patients that exist in Firebase
                 Patient patient = null;
                 if (patientsMap != null && patientsMap.containsKey(patientId)) {
                     patient = patientsMap.get(patientId);
+                    android.util.Log.d("PatientHistory", "✅ Found patient in Firebase map: " + patientId);
+                } else {
+                    android.util.Log.d("PatientHistory", "⚠️ Patient not found in Firebase: " + patientId + " - skipping (only show patients from Firebase)");
+                    continue; // Skip this prescription - patient doesn't exist in Firebase
                 }
                 
+                // Ensure patient has a valid fullName before creating history item
+                if (patient != null && (patient.getFullName() == null || patient.getFullName().isEmpty())) {
+                    String firstName = patient.getFirstName() != null ? patient.getFirstName() : "";
+                    String lastName = patient.getLastName() != null ? patient.getLastName() : "";
+                    String fullName = (firstName + " " + lastName).trim();
+                    if (fullName.isEmpty()) {
+                        fullName = "Patient " + patientId;
+                    }
+                    patient.setFullName(fullName);
+                    android.util.Log.d("PatientHistory", "📥 Set fallback fullName: " + fullName);
+                }
+                
+                // Create history item - collect all medications from prescriptions
                 if (patient != null) {
                     PatientHistoryItem historyItem = new PatientHistoryItem();
                     historyItem.setPatient(patient);
                     historyItem.setPrescriptionCount(1);
                     historyItem.setLastPrescriptionDate(prescription.getCreatedDate() != null ? prescription.getCreatedDate() : "");
-                    historyItem.setLastMedication(prescription.getMedication() != null ? prescription.getMedication() : "");
+                    
+                    // Collect all medications from all prescriptions for this patient
+                    List<String> allMedications = new ArrayList<>();
+                    if (prescription.getMedication() != null && !prescription.getMedication().isEmpty()) {
+                        allMedications.add(prescription.getMedication());
+                    }
+                    // Get all prescriptions for this patient to collect all medications
+                    List<Prescription> patientPrescriptions = prescriptionsByPatientId.get(patientId);
+                    if (patientPrescriptions != null) {
+                        for (Prescription p : patientPrescriptions) {
+                            if (p.getMedication() != null && !p.getMedication().isEmpty() && !allMedications.contains(p.getMedication())) {
+                                allMedications.add(p.getMedication());
+                            }
+                        }
+                    }
+                    // Join all medications with comma
+                    String medicationsText = allMedications.isEmpty() ? "N/A" : String.join(", ", allMedications);
+                    historyItem.setLastMedication(medicationsText);
+                    
                     historyItem.setLastDoctor(prescription.getDoctorName() != null ? prescription.getDoctorName() : "");
                     
                     patientMap.put(patientId, historyItem);
+                    android.util.Log.d("PatientHistory", "✅ Created history item for patient: " + patientId + " with medications: " + medicationsText);
                 }
             } else {
-                // Update existing patient's prescription count and last prescription info
+                // Update existing patient's prescription count and collect all medications
                 PatientHistoryItem existingItem = patientMap.get(patientId);
                 existingItem.setPrescriptionCount(existingItem.getPrescriptionCount() + 1);
-                // Update to most recent prescription
+                android.util.Log.d("PatientHistory", "📥 Updated existing history item for patient: " + patientId + ", count now: " + existingItem.getPrescriptionCount());
+                
+                // Update to most recent prescription date
                 if (prescription.getCreatedDate() != null) {
                     existingItem.setLastPrescriptionDate(prescription.getCreatedDate());
                 }
-                if (prescription.getMedication() != null) {
-                    existingItem.setLastMedication(prescription.getMedication());
+                
+                // Collect all medications from all prescriptions for this patient
+                List<String> allMedications = new ArrayList<>();
+                List<Prescription> patientPrescriptions = prescriptionsByPatientId.get(patientId);
+                if (patientPrescriptions != null) {
+                    for (Prescription p : patientPrescriptions) {
+                        if (p.getMedication() != null && !p.getMedication().isEmpty() && !allMedications.contains(p.getMedication())) {
+                            allMedications.add(p.getMedication());
+                        }
+                    }
                 }
+                // Join all medications with comma
+                String medicationsText = allMedications.isEmpty() ? "N/A" : String.join(", ", allMedications);
+                existingItem.setLastMedication(medicationsText);
+                android.util.Log.d("PatientHistory", "📥 Updated medications for patient: " + patientId + " - " + medicationsText);
+                
                 if (prescription.getDoctorName() != null) {
                     existingItem.setLastDoctor(prescription.getDoctorName());
                 }
             }
         }
         
+        android.util.Log.d("PatientHistory", "📥 Patient map size after processing: " + patientMap.size());
+        
         // Convert map to list
         historyItems.addAll(patientMap.values());
+        
+        android.util.Log.d("PatientHistory", "📥 History items list size: " + historyItems.size());
         
         // Sort by last prescription date (most recent first)
         historyItems.sort((a, b) -> {
@@ -392,6 +615,13 @@ public class PatientHistoryFragment extends Fragment {
             return dateB.compareTo(dateA);
         });
         
+        android.util.Log.d("PatientHistory", "📥 Final history items count: " + historyItems.size());
+        for (int i = 0; i < historyItems.size(); i++) {
+            PatientHistoryItem item = historyItems.get(i);
+            Patient p = item.getPatient();
+            android.util.Log.d("PatientHistory", "📥 History item " + i + ": Patient=" + (p != null ? p.getFullName() : "null") + ", Prescriptions=" + item.getPrescriptionCount());
+        }
+        
         return historyItems;
     }
     
@@ -399,20 +629,79 @@ public class PatientHistoryFragment extends Fragment {
     private List<PatientHistoryItem> processPrescriptionsToHistoryItems(List<Prescription> prescriptions) {
         return processPrescriptionsToHistoryItems(prescriptions, null);
     }
+    
+    /**
+     * Create a minimal Patient object from prescription data
+     * Used when patient is not found in Firebase or SQLite
+     */
+    private Patient createPatientFromPrescription(Prescription prescription) {
+        Patient patient = new Patient();
+        patient.setPatientId(prescription.getPatientId());
+        
+        // Parse patient name from prescription (format: "FirstName LastName")
+        String patientName = prescription.getPatientName();
+        android.util.Log.d("PatientHistory", "📥 Creating patient from prescription. Patient ID: " + prescription.getPatientId() + ", Name: " + patientName);
+        
+        if (patientName != null && !patientName.isEmpty()) {
+            String[] nameParts = patientName.trim().split("\\s+", 2);
+            if (nameParts.length >= 1) {
+                patient.setFirstName(nameParts[0]);
+            }
+            if (nameParts.length >= 2) {
+                patient.setLastName(nameParts[1]);
+            }
+            patient.setFullName(patientName);
+            android.util.Log.d("PatientHistory", "✅ Created patient with name: " + patientName);
+        } else {
+            // Try to get from patient ID if name is missing
+            String patientId = prescription.getPatientId();
+            if (patientId != null && patientId.startsWith("PAT")) {
+                patient.setFirstName("Patient");
+                patient.setLastName(patientId.substring(3)); // Remove "PAT" prefix
+                patient.setFullName("Patient " + patientId.substring(3));
+            } else {
+                patient.setFirstName("Unknown");
+                patient.setLastName("Patient");
+                patient.setFullName("Unknown Patient");
+            }
+            android.util.Log.w("PatientHistory", "⚠️ Patient name is null/empty, using fallback: " + patient.getFullName());
+        }
+        
+        return patient;
+    }
 
     @Override
     public void onResume() {
         super.onResume();
-        loadPatientHistory(); // Refresh when returning to this screen
+        // Only reload if we don't have data yet or if fragment was recreated
+        if (allHistoryItems == null || allHistoryItems.isEmpty()) {
+            android.util.Log.d("PatientHistory", "🔄 onResume: Reloading history (no data)");
+            loadPatientHistory();
+        } else {
+            android.util.Log.d("PatientHistory", "✅ onResume: Already have " + allHistoryItems.size() + " items, skipping reload");
+        }
     }
 
     // RecyclerView Adapter for patient history
     private class PatientHistoryAdapter extends RecyclerView.Adapter<PatientHistoryAdapter.PatientHistoryViewHolder> {
         private List<PatientHistoryItem> patientHistoryItems;
+        
+        public PatientHistoryAdapter() {
+            this.patientHistoryItems = new ArrayList<>();
+        }
 
         public void setPatientHistoryItems(List<PatientHistoryItem> patientHistoryItems) {
+            android.util.Log.d("PatientHistory", "📊 Adapter: Setting " + (patientHistoryItems != null ? patientHistoryItems.size() : 0) + " items");
             this.patientHistoryItems = patientHistoryItems;
+            if (patientHistoryItems != null) {
+                for (int i = 0; i < patientHistoryItems.size(); i++) {
+                    PatientHistoryItem item = patientHistoryItems.get(i);
+                    Patient p = item != null ? item.getPatient() : null;
+                    android.util.Log.d("PatientHistory", "📊 Adapter item " + i + ": " + (p != null ? p.getFullName() : "null") + " (" + item.getPrescriptionCount() + " prescriptions)");
+                }
+            }
             notifyDataSetChanged();
+            android.util.Log.d("PatientHistory", "📊 Adapter: After notifyDataSetChanged, getItemCount() = " + getItemCount());
         }
 
         @NonNull
@@ -424,8 +713,28 @@ public class PatientHistoryFragment extends Fragment {
 
         @Override
         public void onBindViewHolder(@NonNull PatientHistoryViewHolder holder, int position) {
+            if (patientHistoryItems == null || position < 0 || position >= patientHistoryItems.size()) {
+                android.util.Log.e("PatientHistory", "❌ Adapter: Invalid position " + position + " for list size " + (patientHistoryItems != null ? patientHistoryItems.size() : 0));
+                return;
+            }
             PatientHistoryItem historyItem = patientHistoryItems.get(position);
+            Patient p = historyItem != null ? historyItem.getPatient() : null;
+            android.util.Log.d("PatientHistory", "📊 Adapter: Binding position " + position + " - " + (p != null ? p.getFullName() : "null"));
+            
+            // Ensure the view is visible and properly sized
+            holder.itemView.setVisibility(View.VISIBLE);
+            holder.itemView.setAlpha(1.0f);
+            ViewGroup.LayoutParams params = holder.itemView.getLayoutParams();
+            if (params != null) {
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                holder.itemView.setLayoutParams(params);
+            }
+            
             holder.bind(historyItem);
+            
+            // Log after binding to confirm
+            android.util.Log.d("PatientHistory", "✅ Adapter: Bound position " + position + " successfully, view visibility: " + holder.itemView.getVisibility() + ", height: " + holder.itemView.getHeight());
         }
 
         @Override
@@ -456,12 +765,35 @@ public class PatientHistoryFragment extends Fragment {
             public void bind(PatientHistoryItem historyItem) {
                 Patient patient = historyItem.getPatient();
                 
-                patientIdText.setText("Patient ID: " + patient.getPatientId());
-                patientNameText.setText(patient.getFullName());
+                if (patient == null) {
+                    android.util.Log.e("PatientHistory", "❌ Patient is null in bind()!");
+                    patientIdText.setText("Patient ID: Unknown");
+                    patientNameText.setText("Unknown Patient");
+                    prescriptionCountText.setText("Prescriptions: " + historyItem.getPrescriptionCount());
+                    lastPrescriptionText.setText("Last Rx: " + (historyItem.getLastPrescriptionDate() != null ? historyItem.getLastPrescriptionDate() : "N/A"));
+                    lastMedicationText.setText("Last Medication: " + (historyItem.getLastMedication() != null ? historyItem.getLastMedication() : "N/A"));
+                    lastDoctorText.setText("Last Doctor: " + (historyItem.getLastDoctor() != null ? historyItem.getLastDoctor() : "N/A"));
+                    return;
+                }
+                
+                // Ensure fullName is not null
+                String fullName = patient.getFullName();
+                if (fullName == null || fullName.isEmpty()) {
+                    String firstName = patient.getFirstName() != null ? patient.getFirstName() : "";
+                    String lastName = patient.getLastName() != null ? patient.getLastName() : "";
+                    fullName = (firstName + " " + lastName).trim();
+                    if (fullName.isEmpty()) {
+                        fullName = "Patient " + (patient.getPatientId() != null ? patient.getPatientId() : "Unknown");
+                    }
+                    patient.setFullName(fullName);
+                }
+                
+                patientIdText.setText("Patient ID: " + (patient.getPatientId() != null ? patient.getPatientId() : "Unknown"));
+                patientNameText.setText(fullName);
                 prescriptionCountText.setText("Prescriptions: " + historyItem.getPrescriptionCount());
-                lastPrescriptionText.setText("Last Rx: " + historyItem.getLastPrescriptionDate());
-                lastMedicationText.setText("Last Medication: " + historyItem.getLastMedication());
-                lastDoctorText.setText("Last Doctor: " + historyItem.getLastDoctor());
+                lastPrescriptionText.setText("Last Rx: " + (historyItem.getLastPrescriptionDate() != null ? historyItem.getLastPrescriptionDate() : "N/A"));
+                lastMedicationText.setText("Last Medication: " + (historyItem.getLastMedication() != null ? historyItem.getLastMedication() : "N/A"));
+                lastDoctorText.setText("Last Doctor: " + (historyItem.getLastDoctor() != null ? historyItem.getLastDoctor() : "N/A"));
                 
                 // Make card clickable to register patient again
                 cardView.setOnClickListener(v -> {
@@ -485,7 +817,7 @@ public class PatientHistoryFragment extends Fragment {
                     args.putString("FULL_NAME", patient.getFullName());
                     args.putString("ADDRESS", patient.getFullAddress());
                     args.putString("DOB", patient.getDateOfBirth());
-                    args.putString("BIRTH_PLACE", patient.getBirthPlace());
+                    args.putString("BIRTH_PLACE", patient.getBirthPlace() != null ? patient.getBirthPlace() : "");
                     args.putString("GENDER", patient.getGender());
                     args.putString("AGE", patient.getAge());
                     args.putString("PHONE", patient.getPhoneNumber());

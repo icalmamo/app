@@ -1,6 +1,11 @@
 package com.example.h_cas;
 
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.InputFilter;
+import android.text.InputType;
+import android.text.Spanned;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -59,6 +64,7 @@ public class CreateEmployeeFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_create_employee, container, false);
         
         initializeViews(view);
+        setupPhoneNumberField();
         setupRoleSpinner();
         setupCreateButton();
         initializeDatabase();
@@ -273,13 +279,16 @@ public class CreateEmployeeFragment extends Fragment {
             isValid = false;
         }
         
-        // Validate phone
+        // Validate phone (11 digits, starts with 09)
         String phone = phoneEditText.getText().toString().trim();
         if (phone.isEmpty()) {
             phoneLayout.setError("Phone number is required");
             isValid = false;
-        } else if (phone.length() < 10) {
-            phoneLayout.setError("Please enter a valid phone number");
+        } else if (!phone.startsWith("09")) {
+            phoneLayout.setError("Phone number must start with 09");
+            isValid = false;
+        } else if (phone.length() != 11) {
+            phoneLayout.setError("Phone number must be exactly 11 digits");
             isValid = false;
         }
         
@@ -342,5 +351,141 @@ public class CreateEmployeeFragment extends Fragment {
         usernameEditText.setText("");
         passwordEditText.setText("");
         roleAutoCompleteTextView.setText("Select Role", false);
+    }
+    
+    /**
+     * Set up phone number field with validation (11 digits, starts with 09, numbers only)
+     */
+    private void setupPhoneNumberField() {
+        if (phoneEditText != null) {
+            // Set input type to phone
+            phoneEditText.setInputType(InputType.TYPE_CLASS_PHONE);
+            
+            // Add input filter to limit to 11 digits and only numbers
+            InputFilter[] filters = new InputFilter[] {
+                new InputFilter.LengthFilter(11), // Maximum 11 digits
+                new InputFilter() {
+                    @Override
+                    public CharSequence filter(CharSequence source, int start, int end,
+                                               Spanned dest, int dstart, int dend) {
+                        // Only allow digits
+                        for (int i = start; i < end; i++) {
+                            if (!Character.isDigit(source.charAt(i))) {
+                                return ""; // Reject non-digit characters
+                            }
+                        }
+                        return null; // Accept the input
+                    }
+                }
+            };
+            phoneEditText.setFilters(filters);
+            
+            // Add TextWatcher for real-time validation and auto-insert "09" prefix
+            phoneEditText.addTextChangedListener(new TextWatcher() {
+                private boolean isUpdating = false;
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+                    // Not needed
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    // Not needed
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    if (isUpdating) {
+                        return;
+                    }
+                    
+                    String phoneNumber = s.toString().trim();
+                    
+                    // Auto-insert "09" prefix if user starts typing without it
+                    if (!phoneNumber.isEmpty() && !phoneNumber.startsWith("09")) {
+                        isUpdating = true;
+                        // If user typed a digit that's not "0" or "9", prepend "09"
+                        if (phoneNumber.length() == 1 && Character.isDigit(phoneNumber.charAt(0))) {
+                            // User typed a single digit, prepend "09"
+                            s.clear();
+                            s.append("09");
+                            s.append(phoneNumber);
+                        } else if (phoneNumber.startsWith("0") && phoneNumber.length() > 1 && phoneNumber.charAt(1) != '9') {
+                            // User typed "0" followed by non-9 digit, insert "9" after "0"
+                            s.clear();
+                            s.append("09");
+                            s.append(phoneNumber.substring(1));
+                        } else {
+                            // User typed something else, prepend "09"
+                            s.clear();
+                            s.append("09");
+                            s.append(phoneNumber);
+                        }
+                        isUpdating = false;
+                    }
+                    
+                    // Prevent deletion of "09" prefix
+                    if (phoneNumber.length() < 2 && !phoneNumber.isEmpty()) {
+                        isUpdating = true;
+                        s.clear();
+                        s.append("09");
+                        isUpdating = false;
+                    }
+                    
+                    // Limit to 11 digits
+                    if (phoneNumber.length() > 11) {
+                        isUpdating = true;
+                        s.delete(11, phoneNumber.length());
+                        isUpdating = false;
+                    }
+                    
+                    validatePhoneNumber(s.toString().trim());
+                }
+            });
+            
+            // Set initial "09" prefix when field gains focus
+            phoneEditText.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus && phoneEditText.getText() != null) {
+                    String currentText = phoneEditText.getText().toString().trim();
+                    if (currentText.isEmpty()) {
+                        phoneEditText.setText("09");
+                        phoneEditText.setSelection(2); // Move cursor to end
+                    } else if (!currentText.startsWith("09")) {
+                        phoneEditText.setText("09" + currentText);
+                        phoneEditText.setSelection(phoneEditText.getText().length());
+                    }
+                }
+            });
+        }
+    }
+    
+    /**
+     * Validate phone number format (11 digits, starts with 09)
+     */
+    private void validatePhoneNumber(String phoneNumber) {
+        if (phoneLayout == null) {
+            return;
+        }
+        
+        if (phoneNumber.isEmpty()) {
+            phoneLayout.setError(null);
+            return;
+        }
+        
+        // Check if it starts with 09
+        if (!phoneNumber.startsWith("09")) {
+            phoneLayout.setError("Phone number must start with 09");
+            return;
+        }
+        
+        // Check if it's exactly 11 digits
+        if (phoneNumber.length() != 11) {
+            phoneLayout.setError("Phone number must be exactly 11 digits");
+            return;
+        }
+        
+        // Valid phone number
+        phoneLayout.setError(null);
     }
 }

@@ -14,10 +14,10 @@
     <color name="doctor_navy_dark">#42A5F5</color>
     <color name="doctor_white_accent">#FFFFFF</color>
     
-    <!-- Admin Theme - Light Purple + White -->
-    <color name="admin_deep_purple">#BA68C8</color>
-    <color name="admin_deep_purple_light">#CE93D8</color>
-    <color name="admin_deep_purple_dark">#AB47BC</color>
+    <!-- Admin Theme - Grey + White -->
+    <color name="admin_deep_purple">#757575</color>
+    <color name="admin_deep_purple_light">#BDBDBD</color>
+    <color name="admin_deep_purple_dark">#616161</color>
     <color name="admin_white_accent">#FFFFFF</color>
     
     <!-- Nurse Theme - Light Teal + White -->
@@ -65,4 +65,11 @@
     <color name="grey_medium">#9E9E9E</color>
     <color name="grey_dark">#616161</color>
     <color name="divider_grey">#E0E0E0</color>
+    
+    <!-- Login Green Theme (matching logo) -->
+    <color name="login_green_primary">#2E7D32</color>
+    <color name="login_green_dark">#1B5E20</color>
+    <color name="login_green_light">#4CAF50</color>
+    <color name="login_green_accent">#66BB6A</color>
+    <color name="login_background_green">#1B5E20</color>
 </resources>

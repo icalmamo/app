@@ -1,6 +1,7 @@
 package com.example.h_cas;
 
 import android.app.AlertDialog;
+import android.app.DatePickerDialog;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -8,6 +9,7 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.DatePicker;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -18,6 +20,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import android.widget.ArrayAdapter;
+import java.util.Arrays;
+import java.util.Calendar;
 
 import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.models.Medicine;
@@ -205,7 +211,7 @@ public class NewEnhancedInventoryFragment extends Fragment {
             newMedicine.setCategory(medicine[5]);
             newMedicine.setDescription(medicine[6]);
             newMedicine.setExpiryDate(medicine[7]);
-            newMedicine.setPrice(Double.parseDouble(medicine[8]));
+            newMedicine.setPrice(0.0); // All medicines are free
             newMedicine.setSupplier(medicine[9]);
             
             databaseHelper.addMedicine(newMedicine);
@@ -453,15 +459,20 @@ public class NewEnhancedInventoryFragment extends Fragment {
         View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_add_medicine, null);
         builder.setView(dialogView);
         
-        TextInputEditText nameInput = dialogView.findViewById(R.id.medicineNameInput);
+        MaterialAutoCompleteTextView nameInput = dialogView.findViewById(R.id.medicineNameInput);
         TextInputEditText dosageInput = dialogView.findViewById(R.id.dosageInput);
         TextInputEditText stockInput = dialogView.findViewById(R.id.stockInput);
         TextInputEditText unitInput = dialogView.findViewById(R.id.unitInput);
         TextInputEditText categoryInput = dialogView.findViewById(R.id.categoryInput);
         TextInputEditText descriptionInput = dialogView.findViewById(R.id.descriptionInput);
         TextInputEditText expiryInput = dialogView.findViewById(R.id.expiryInput);
-        TextInputEditText priceInput = dialogView.findViewById(R.id.priceInput);
         TextInputEditText supplierInput = dialogView.findViewById(R.id.supplierInput);
+        
+        // Setup autocomplete for medicine name
+        setupMedicineNameAutocomplete(nameInput);
+        
+        // Setup date picker for expiry date
+        setupExpiryDatePicker(expiryInput);
         
         builder.setPositiveButton("Add Medicine", (dialog, which) -> {
             String name = nameInput.getText().toString().trim();
@@ -471,21 +482,114 @@ public class NewEnhancedInventoryFragment extends Fragment {
             String category = categoryInput.getText().toString().trim();
             String description = descriptionInput.getText().toString().trim();
             String expiry = expiryInput.getText().toString().trim();
-            String priceStr = priceInput.getText().toString().trim();
             String supplier = supplierInput.getText().toString().trim();
             
-            if (validateMedicineInput(name, dosage, stockStr, unit, category, expiry, priceStr, supplier)) {
+            if (validateMedicineInput(name, dosage, stockStr, unit, category, expiry, supplier)) {
                 int stock = Integer.parseInt(stockStr);
-                double price = Double.parseDouble(priceStr);
-                addMedicine(name, dosage, stock, unit, category, description, expiry, price, supplier);
+                addMedicine(name, dosage, stock, unit, category, description, expiry, supplier);
             }
         });
         
         builder.setNegativeButton("Cancel", null);
         builder.show();
     }
+    
+    /**
+     * Setup date picker for expiry date (current date to future only)
+     */
+    private void setupExpiryDatePicker(TextInputEditText expiryInput) {
+        expiryInput.setOnClickListener(v -> showExpiryDatePicker(expiryInput));
+    }
+    
+    /**
+     * Show date picker dialog for expiry date
+     */
+    private void showExpiryDatePicker(TextInputEditText expiryInput) {
+        Calendar calendar = Calendar.getInstance();
+        int year = calendar.get(Calendar.YEAR);
+        int month = calendar.get(Calendar.MONTH);
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
+        
+        // Try to parse existing date if present
+        String existingDate = expiryInput.getText().toString().trim();
+        if (!existingDate.isEmpty() && existingDate.matches("\\d{4}-\\d{2}-\\d{2}")) {
+            try {
+                String[] parts = existingDate.split("-");
+                year = Integer.parseInt(parts[0]);
+                month = Integer.parseInt(parts[1]) - 1; // Month is 0-based
+                day = Integer.parseInt(parts[2]);
+            } catch (Exception e) {
+                // Use current date if parsing fails
+            }
+        }
+        
+        DatePickerDialog datePickerDialog = new DatePickerDialog(
+            getContext(),
+            android.R.style.Theme_Material_Dialog,
+            (DatePicker datePicker, int selectedYear, int selectedMonth, int selectedDay) -> {
+                // Format the date as YYYY-MM-DD
+                String formattedDate = String.format("%04d-%02d-%02d", 
+                    selectedYear, selectedMonth + 1, selectedDay);
+                expiryInput.setText(formattedDate);
+            }, year, month, day);
+        
+        // Set minimum date to today (no past dates allowed)
+        datePickerDialog.getDatePicker().setMinDate(System.currentTimeMillis());
+        
+        // Set maximum date to 10 years from now (reasonable limit)
+        Calendar maxCalendar = Calendar.getInstance();
+        maxCalendar.add(Calendar.YEAR, 10);
+        datePickerDialog.getDatePicker().setMaxDate(maxCalendar.getTimeInMillis());
+        
+        datePickerDialog.setTitle("Select Expiry Date");
+        datePickerDialog.show();
+    }
+    
+    /**
+     * Setup autocomplete for medicine name with common Philippine medicines
+     */
+    private void setupMedicineNameAutocomplete(MaterialAutoCompleteTextView medicineNameInput) {
+        // List of common medicines available in the Philippines
+        List<String> philippineMedicines = new ArrayList<>(Arrays.asList(
+            "Bioflu", "Biogesic", "Neozep", "Decolgen", "Solmux",
+            "Alaxan", "Medicol", "Tempra", "Calpol", "Paracetamol",
+            "Ibuprofen", "Mefenamic Acid", "Diclofenac", "Naproxen",
+            "Amoxicillin", "Azithromycin", "Cefalexin", "Ciprofloxacin",
+            "Clarithromycin", "Doxycycline", "Erythromycin", "Penicillin",
+            "Loratadine", "Cetirizine", "Fexofenadine", "Chlorphenamine",
+            "Salbutamol", "Montelukast", "Budesonide", "Fluticasone",
+            "Omeprazole", "Lansoprazole", "Pantoprazole", "Ranitidine",
+            "Metformin", "Glibenclamide", "Insulin", "Glimepiride",
+            "Losartan", "Amlodipine", "Captopril", "Enalapril",
+            "Atorvastatin", "Simvastatin", "Rosuvastatin", "Lovastatin",
+            "Warfarin", "Aspirin", "Clopidogrel", "Ticlopidine",
+            "Levothyroxine", "Methimazole", "Propylthiouracil",
+            "Prednisone", "Dexamethasone", "Hydrocortisone",
+            "Furosemide", "Hydrochlorothiazide", "Spironolactone",
+            "Metoclopramide", "Domperidone", "Loperamide",
+            "Diphenhydramine", "Promethazine", "Dimenhydrinate",
+            "Multivitamins", "Vitamin C", "Vitamin D", "Calcium",
+            "Iron Supplements", "Folic Acid", "B Complex",
+            "Mefenamic", "Tramadol", "Tramal", "Dolcet",
+            "Robitussin", "Tuseran", "Ascof", "Vicks Vaporub",
+            "Betadine", "Hipoglos", "Caladryl", "Calamine",
+            "Diatabs", "Imodium", "Buscopan", "Dulcolax",
+            "Senokot", "Lactulose", "Gaviscon", "Maalox",
+            "Tums", "Rolaids", "Pepto Bismol", "Kremil-S"
+        ));
+        
+        // Create adapter for autocomplete
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+            getContext(),
+            android.R.layout.simple_dropdown_item_1line,
+            philippineMedicines
+        );
+        
+        medicineNameInput.setAdapter(adapter);
+        medicineNameInput.setThreshold(1); // Show suggestions after 1 character
+    }
 
-    private boolean validateMedicineInput(String name, String dosage, String stockStr, String unit, String category, String expiry, String priceStr, String supplier) {
+    private boolean validateMedicineInput(String name, String dosage, String stockStr, String unit, String category, String expiry, String supplier) {
         if (name.isEmpty()) {
             Toast.makeText(getContext(), "❌ Medicine name is required", Toast.LENGTH_SHORT).show();
             return false;
@@ -510,8 +614,36 @@ public class NewEnhancedInventoryFragment extends Fragment {
             Toast.makeText(getContext(), "❌ Expiry date is required", Toast.LENGTH_SHORT).show();
             return false;
         }
-        if (priceStr.isEmpty()) {
-            Toast.makeText(getContext(), "❌ Price is required", Toast.LENGTH_SHORT).show();
+        
+        // Validate expiry date format and ensure it's not in the past
+        try {
+            String[] dateParts = expiry.split("-");
+            if (dateParts.length != 3) {
+                Toast.makeText(getContext(), "❌ Invalid date format. Use YYYY-MM-DD", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            
+            Calendar selectedDate = Calendar.getInstance();
+            selectedDate.set(Calendar.YEAR, Integer.parseInt(dateParts[0]));
+            selectedDate.set(Calendar.MONTH, Integer.parseInt(dateParts[1]) - 1); // Month is 0-based
+            selectedDate.set(Calendar.DAY_OF_MONTH, Integer.parseInt(dateParts[2]));
+            selectedDate.set(Calendar.HOUR_OF_DAY, 0);
+            selectedDate.set(Calendar.MINUTE, 0);
+            selectedDate.set(Calendar.SECOND, 0);
+            selectedDate.set(Calendar.MILLISECOND, 0);
+            
+            Calendar today = Calendar.getInstance();
+            today.set(Calendar.HOUR_OF_DAY, 0);
+            today.set(Calendar.MINUTE, 0);
+            today.set(Calendar.SECOND, 0);
+            today.set(Calendar.MILLISECOND, 0);
+            
+            if (selectedDate.before(today)) {
+                Toast.makeText(getContext(), "❌ Expiry date cannot be in the past. Please select today or a future date.", Toast.LENGTH_LONG).show();
+                return false;
+            }
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "❌ Invalid date format. Use YYYY-MM-DD", Toast.LENGTH_SHORT).show();
             return false;
         }
         if (supplier.isEmpty()) {
@@ -530,21 +662,10 @@ public class NewEnhancedInventoryFragment extends Fragment {
             return false;
         }
         
-        try {
-            double price = Double.parseDouble(priceStr);
-            if (price < 0) {
-                Toast.makeText(getContext(), "❌ Price must be positive", Toast.LENGTH_SHORT).show();
-                return false;
-            }
-        } catch (NumberFormatException e) {
-            Toast.makeText(getContext(), "❌ Invalid price", Toast.LENGTH_SHORT).show();
-            return false;
-        }
-        
         return true;
     }
 
-    private void addMedicine(String name, String dosage, int stock, String unit, String category, String description, String expiry, double price, String supplier) {
+    private void addMedicine(String name, String dosage, int stock, String unit, String category, String description, String expiry, String supplier) {
         Medicine newMedicine = new Medicine();
         newMedicine.setMedicineId("MED" + System.currentTimeMillis());
         newMedicine.setMedicineName(name);
@@ -554,7 +675,7 @@ public class NewEnhancedInventoryFragment extends Fragment {
         newMedicine.setCategory(category);
         newMedicine.setDescription(description);
         newMedicine.setExpiryDate(expiry);
-        newMedicine.setPrice(price);
+        newMedicine.setPrice(0.0); // All medicines are free
         newMedicine.setSupplier(supplier);
 
         // Add to database
@@ -720,7 +841,6 @@ public class NewEnhancedInventoryFragment extends Fragment {
             private TextView stockText;
             private TextView categoryText;
             private TextView expiryText;
-            private TextView priceText;
             private TextView supplierText;
             private MaterialButton editButton;
             private MaterialButton deleteButton;
@@ -733,7 +853,6 @@ public class NewEnhancedInventoryFragment extends Fragment {
                 stockText = itemView.findViewById(R.id.stockText);
                 categoryText = itemView.findViewById(R.id.categoryText);
                 expiryText = itemView.findViewById(R.id.expiryText);
-                priceText = itemView.findViewById(R.id.priceText);
                 supplierText = itemView.findViewById(R.id.supplierText);
                 editButton = itemView.findViewById(R.id.editButton);
                 deleteButton = itemView.findViewById(R.id.deleteButton);
@@ -752,7 +871,6 @@ public class NewEnhancedInventoryFragment extends Fragment {
                 
                 String expiryDate = medicine.getExpiryDate() != null ? medicine.getExpiryDate() : "N/A";
                 expiryText.setText("Expires: " + expiryDate);
-                priceText.setText("Price: ₱" + String.format("%.2f", medicine.getPrice()));
                 supplierText.setText("Supplier: " + (medicine.getSupplier() != null ? medicine.getSupplier() : "N/A"));
 
                 // Set stock color based on quantity using configurable minimum
@@ -792,15 +910,20 @@ public class NewEnhancedInventoryFragment extends Fragment {
         View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_add_medicine, null);
         builder.setView(dialogView);
         
-        TextInputEditText nameInput = dialogView.findViewById(R.id.medicineNameInput);
+        MaterialAutoCompleteTextView nameInput = dialogView.findViewById(R.id.medicineNameInput);
         TextInputEditText dosageInput = dialogView.findViewById(R.id.dosageInput);
         TextInputEditText stockInput = dialogView.findViewById(R.id.stockInput);
         TextInputEditText unitInput = dialogView.findViewById(R.id.unitInput);
         TextInputEditText categoryInput = dialogView.findViewById(R.id.categoryInput);
         TextInputEditText descriptionInput = dialogView.findViewById(R.id.descriptionInput);
         TextInputEditText expiryInput = dialogView.findViewById(R.id.expiryInput);
-        TextInputEditText priceInput = dialogView.findViewById(R.id.priceInput);
         TextInputEditText supplierInput = dialogView.findViewById(R.id.supplierInput);
+        
+        // Setup autocomplete for medicine name
+        setupMedicineNameAutocomplete(nameInput);
+        
+        // Setup date picker for expiry date
+        setupExpiryDatePicker(expiryInput);
         
         // Pre-fill with current values
         nameInput.setText(medicine.getMedicineName());
@@ -810,7 +933,6 @@ public class NewEnhancedInventoryFragment extends Fragment {
         categoryInput.setText(medicine.getCategory());
         descriptionInput.setText(medicine.getDescription());
         expiryInput.setText(medicine.getExpiryDate());
-        priceInput.setText(String.valueOf(medicine.getPrice()));
         supplierInput.setText(medicine.getSupplier());
         
         builder.setPositiveButton("Update Medicine", (dialog, which) -> {
@@ -821,13 +943,11 @@ public class NewEnhancedInventoryFragment extends Fragment {
             String category = categoryInput.getText().toString().trim();
             String description = descriptionInput.getText().toString().trim();
             String expiry = expiryInput.getText().toString().trim();
-            String priceStr = priceInput.getText().toString().trim();
             String supplier = supplierInput.getText().toString().trim();
             
-            if (validateMedicineInput(name, dosage, stockStr, unit, category, expiry, priceStr, supplier)) {
+            if (validateMedicineInput(name, dosage, stockStr, unit, category, expiry, supplier)) {
                 int stock = Integer.parseInt(stockStr);
-                double price = Double.parseDouble(priceStr);
-                updateMedicine(medicine, name, dosage, stock, unit, category, description, expiry, price, supplier);
+                updateMedicine(medicine, name, dosage, stock, unit, category, description, expiry, supplier);
             }
         });
         
@@ -835,7 +955,7 @@ public class NewEnhancedInventoryFragment extends Fragment {
         builder.show();
     }
 
-    private void updateMedicine(Medicine medicine, String name, String dosage, int stock, String unit, String category, String description, String expiry, double price, String supplier) {
+    private void updateMedicine(Medicine medicine, String name, String dosage, int stock, String unit, String category, String description, String expiry, String supplier) {
         medicine.setMedicineName(name);
         medicine.setDosage(dosage);
         medicine.setStockQuantity(stock);
@@ -843,7 +963,7 @@ public class NewEnhancedInventoryFragment extends Fragment {
         medicine.setCategory(category);
         medicine.setDescription(description);
         medicine.setExpiryDate(expiry);
-        medicine.setPrice(price);
+        medicine.setPrice(0.0); // All medicines are free
         medicine.setSupplier(supplier);
 
         // Update in database

@@ -38,7 +38,7 @@
                     android:layout_marginBottom="16dp"
                     android:contentDescription="HCAS Logo"
                     android:scaleType="fitCenter"
-                    android:src="@drawable/ic_hcas_logo" />
+                    android:src="@drawable/hcas_logo" />
 
                 <TextView
                     android:id="@+id/welcomeTextView"

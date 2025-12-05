@@ -288,9 +288,17 @@ public class LoginActivity extends AppCompatActivity {
                     if (employee != null) {
                         handleAuthenticationResult(employee);
                     } else {
-                        // RTDB authentication failed - try Firebase Auth
-                        // This handles cases where password was reset via Firebase Auth
-                        tryFirebaseAuthAndSync(username, password);
+                        // RTDB authentication failed - check if username is email before trying Firebase Auth
+                        // Firebase Auth only works with email, not username
+                        boolean isEmail = username != null && username.contains("@");
+                        if (isEmail) {
+                            // Try Firebase Auth only if input is an email
+                            // This handles cases where password was reset via Firebase Auth
+                            tryFirebaseAuthAndSync(username, password);
+                        } else {
+                            // Username login failed - try SQLite fallback
+                            tryFallbackToSQLite(username, password);
+                        }
                     }
                 });
             });

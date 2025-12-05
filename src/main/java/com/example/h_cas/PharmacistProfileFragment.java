@@ -22,9 +22,12 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.provider.MediaStore;
 
-import com.google.firebase.storage.FirebaseStorage;
-import com.google.firebase.storage.StorageReference;
-import com.google.firebase.storage.UploadTask;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
+import com.example.h_cas.utils.ImageUtils;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -50,13 +53,8 @@ public class PharmacistProfileFragment extends Fragment {
     private TextView pharmacistEmailTextView;
     private TextView pharmacistPhoneTextView;
     private TextView pharmacistAddressTextView;
-    private TextView pharmacistLicenseTextView;
-    private TextView pharmacistDepartmentTextView;
-    private TextView pharmacistExperienceTextView;
-    
     // Action Buttons
     private MaterialButton editPersonalInfoButton;
-    private MaterialButton editProfessionalInfoButton;
     private MaterialButton changePasswordButton;
     private MaterialButton changeProfilePictureButton;
     private MaterialButton saveChangesButton;
@@ -73,21 +71,14 @@ public class PharmacistProfileFragment extends Fragment {
     
     // Edit mode flags
     private boolean isPersonalInfoEditable = false;
-    private boolean isProfessionalInfoEditable = false;
     
     // Profile Picture
     private ActivityResultLauncher<Intent> imagePickerLauncher;
-    private FirebaseStorage storage;
-    private StorageReference storageReference;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_pharmacist_profile, container, false);
-        
-        // Initialize Firebase Storage
-        storage = FirebaseStorage.getInstance();
-        storageReference = storage.getReference();
         
         initializeViews(view);
         initializeData();
@@ -130,14 +121,8 @@ public class PharmacistProfileFragment extends Fragment {
         pharmacistPhoneTextView = view.findViewById(R.id.pharmacistPhoneTextView);
         pharmacistAddressTextView = view.findViewById(R.id.pharmacistAddressTextView);
         
-        // Professional information
-        pharmacistLicenseTextView = view.findViewById(R.id.pharmacistLicenseTextView);
-        pharmacistDepartmentTextView = view.findViewById(R.id.pharmacistDepartmentTextView);
-        pharmacistExperienceTextView = view.findViewById(R.id.pharmacistExperienceTextView);
-        
         // Action buttons
         editPersonalInfoButton = view.findViewById(R.id.editPersonalInfoButton);
-        editProfessionalInfoButton = view.findViewById(R.id.editProfessionalInfoButton);
         changePasswordButton = view.findViewById(R.id.changePasswordButton);
         changeProfilePictureButton = view.findViewById(R.id.changeProfilePictureButton);
         saveChangesButton = view.findViewById(R.id.saveChangesButton);
@@ -186,7 +171,6 @@ public class PharmacistProfileFragment extends Fragment {
 
     private void setupClickListeners() {
         editPersonalInfoButton.setOnClickListener(v -> togglePersonalInfoEdit());
-        editProfessionalInfoButton.setOnClickListener(v -> toggleProfessionalInfoEdit());
         changePasswordButton.setOnClickListener(v -> showChangePasswordDialog());
         changeProfilePictureButton.setOnClickListener(v -> showProfilePictureDialog());
         saveChangesButton.setOnClickListener(v -> saveProfileChanges());
@@ -211,9 +195,6 @@ public class PharmacistProfileFragment extends Fragment {
         pharmacistEmailTextView.setText(currentPharmacist.getEmail() != null ? currentPharmacist.getEmail() : (loggedInEmail != null ? loggedInEmail : "pharmacist@hcas.com"));
         pharmacistPhoneTextView.setText(currentPharmacist.getPhone() != null ? currentPharmacist.getPhone() : "Not set");
         pharmacistAddressTextView.setText(currentPharmacist.getAddress() != null ? currentPharmacist.getAddress() : "Not set");
-        pharmacistLicenseTextView.setText(currentPharmacist.getLicenseNumber() != null ? currentPharmacist.getLicenseNumber() : "Not set");
-        pharmacistDepartmentTextView.setText(currentPharmacist.getDepartment() != null ? currentPharmacist.getDepartment() : "Not set");
-        pharmacistExperienceTextView.setText(currentPharmacist.getExperience() != null ? currentPharmacist.getExperience() : "Not set");
         
         // Load profile picture if available
         if (currentPharmacist.getProfilePictureUrl() != null && !currentPharmacist.getProfilePictureUrl().isEmpty()) {
@@ -226,13 +207,64 @@ public class PharmacistProfileFragment extends Fragment {
     /**
      * Load profile picture from URL
      */
-    private void loadProfilePicture(String imageUrl) {
+    private void loadProfilePicture(String imageData) {
+        if (imageData == null || imageData.isEmpty() || profileImageView == null) {
+            if (profileImageView != null) {
+                profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+            }
+            return;
+        }
+        
+        // Check if it's a base64 string
+        if (ImageUtils.isBase64Image(imageData)) {
+            loadProfilePictureFromBase64(imageData);
+        } else if (ImageUtils.isUrl(imageData)) {
+            loadProfilePictureFromUrl(imageData);
+        } else {
+            loadProfilePictureFromBase64(imageData);
+        }
+    }
+    
+    private void loadProfilePictureFromBase64(String base64String) {
+        if (base64String == null || base64String.isEmpty() || profileImageView == null) {
+            if (profileImageView != null) {
+                profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+            }
+            return;
+        }
+        
+        new Thread(() -> {
+            try {
+                Bitmap bitmap = ImageUtils.convertBase64ToBitmap(base64String);
+                
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (profileImageView != null && bitmap != null) {
+                            profileImageView.setImageBitmap(bitmap);
+                        } else {
+                            profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                android.util.Log.e("PharmacistProfile", "❌ Error loading base64 image: " + e.getMessage(), e);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (profileImageView != null) {
+                            profileImageView.setImageResource(R.drawable.ic_pharmacist_avatar);
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    private void loadProfilePictureFromUrl(String imageUrl) {
         if (imageUrl == null || imageUrl.isEmpty() || profileImageView == null) {
             return;
         }
         
         try {
-            // Use a background thread to load the image
             new Thread(() -> {
                 try {
                     URL url = new URL(imageUrl);
@@ -242,7 +274,6 @@ public class PharmacistProfileFragment extends Fragment {
                     InputStream input = connection.getInputStream();
                     Bitmap bitmap = BitmapFactory.decodeStream(input);
                     
-                    // Update UI on main thread
                     if (getActivity() != null) {
                         getActivity().runOnUiThread(() -> {
                             if (profileImageView != null && bitmap != null) {
@@ -253,7 +284,6 @@ public class PharmacistProfileFragment extends Fragment {
                         });
                     }
                 } catch (Exception e) {
-                    // Fallback to default avatar on error
                     if (getActivity() != null) {
                         getActivity().runOnUiThread(() -> {
                             if (profileImageView != null) {
@@ -281,32 +311,11 @@ public class PharmacistProfileFragment extends Fragment {
         }
     }
 
-    private void toggleProfessionalInfoEdit() {
-        isProfessionalInfoEditable = !isProfessionalInfoEditable;
-        setProfessionalInfoEditable(isProfessionalInfoEditable);
-        
-        if (isProfessionalInfoEditable) {
-            editProfessionalInfoButton.setText("Cancel Edit");
-            showEditButtons();
-        } else {
-            editProfessionalInfoButton.setText("Edit Professional Info");
-            hideEditButtons();
-        }
-    }
-
     private void setPersonalInfoEditable(boolean editable) {
         // In a real implementation, you would make TextViews editable or show EditTexts
         // For now, we'll just show a toast
         if (editable) {
             Toast.makeText(getContext(), "Personal info edit mode activated", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void setProfessionalInfoEditable(boolean editable) {
-        // In a real implementation, you would make TextViews editable or show EditTexts
-        // For now, we'll just show a toast
-        if (editable) {
-            Toast.makeText(getContext(), "Professional info edit mode activated", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -326,18 +335,14 @@ public class PharmacistProfileFragment extends Fragment {
         
         // Reset edit modes
         isPersonalInfoEditable = false;
-        isProfessionalInfoEditable = false;
         editPersonalInfoButton.setText("Edit Personal Info");
-        editProfessionalInfoButton.setText("Edit Professional Info");
         hideEditButtons();
     }
 
     private void cancelEdit() {
         // Reset edit modes
         isPersonalInfoEditable = false;
-        isProfessionalInfoEditable = false;
         editPersonalInfoButton.setText("Edit Personal Info");
-        editProfessionalInfoButton.setText("Edit Professional Info");
         hideEditButtons();
         
         // Reload original data
@@ -390,10 +395,125 @@ public class PharmacistProfileFragment extends Fragment {
         return true;
     }
 
+    /**
+     * Change password using Firebase Authentication (like forgot password feature)
+     */
     private void changePassword(String currentPassword, String newPassword) {
-        // In a real implementation, you would validate the current password and update it
-        // For now, we'll just show a success message
-        Toast.makeText(getContext(), "✅ Password changed successfully!", Toast.LENGTH_SHORT).show();
+        try {
+            // Get user's email from current pharmacist data
+            String email = currentPharmacist.getEmail();
+            if (email == null || email.isEmpty()) {
+                // Try to get from logged in email
+                email = loggedInEmail;
+            }
+            
+            if (email == null || email.isEmpty() || !email.contains("@")) {
+                Toast.makeText(getContext(), "❌ Email address is required for password change. Please update your email first.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            
+            // Create final copies for lambda expressions
+            final String finalEmail = email;
+            final String finalNewPassword = newPassword;
+            
+            FirebaseAuth auth = FirebaseAuth.getInstance();
+            if (auth == null) {
+                Toast.makeText(getContext(), "❌ Firebase Authentication is not available. Please try again later.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            
+            // Show loading state
+            Toast.makeText(getContext(), "Changing password...", Toast.LENGTH_SHORT).show();
+            
+            // Sign in with current password to verify
+            auth.signInWithEmailAndPassword(finalEmail, currentPassword)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        // Current password is correct - update to new password
+                        FirebaseUser user = auth.getCurrentUser();
+                        if (user != null) {
+                            user.updatePassword(finalNewPassword)
+                                .addOnCompleteListener(updateTask -> {
+                                    if (updateTask.isSuccessful()) {
+                                        // Password updated in Firebase Auth - sync to RTDB
+                                        syncPasswordToRTDB(finalEmail, finalNewPassword);
+                                        auth.signOut(); // Sign out after password change
+                                    } else {
+                                        Exception e = updateTask.getException();
+                                        String errorMsg = e != null ? e.getMessage() : "Failed to update password";
+                                        Toast.makeText(getContext(), "❌ Failed to update password: " + errorMsg, Toast.LENGTH_LONG).show();
+                                        auth.signOut();
+                                    }
+                                });
+                        } else {
+                            Toast.makeText(getContext(), "❌ User not found", Toast.LENGTH_SHORT).show();
+                            auth.signOut();
+                        }
+                    } else {
+                        // Current password is incorrect
+                        Exception e = task.getException();
+                        String errorMsg = e != null && e.getMessage() != null ? e.getMessage() : "Current password is incorrect";
+                        if (errorMsg.contains("wrong-password") || errorMsg.contains("invalid-credential")) {
+                            Toast.makeText(getContext(), "❌ Current password is incorrect", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(getContext(), "❌ Error: " + errorMsg, Toast.LENGTH_LONG).show();
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Toast.makeText(getContext(), "❌ Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "Error changing password: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+    
+    /**
+     * Sync password to Firebase RTDB after successful Firebase Auth update
+     */
+    private void syncPasswordToRTDB(String email, String newPassword) {
+        try {
+            DatabaseReference employeesRef = FirebaseDatabase.getInstance(
+                    "https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("employees");
+            
+            employeesRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                @Override
+                public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                    if (snapshot.exists() && snapshot.hasChildren()) {
+                        String normalizedEmail = email.toLowerCase().trim();
+                        
+                        for (com.google.firebase.database.DataSnapshot child : snapshot.getChildren()) {
+                            Object emailObj = child.child("email").getValue();
+                            if (emailObj != null) {
+                                String storedEmail = emailObj.toString().trim().toLowerCase();
+                                
+                                if (storedEmail.equals(normalizedEmail)) {
+                                    // Found the employee - update password in RTDB
+                                    child.getRef().child("password").setValue(newPassword)
+                                        .addOnSuccessListener(aVoid -> {
+                                            Toast.makeText(getContext(), "✅ Password changed successfully!", Toast.LENGTH_SHORT).show();
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            Toast.makeText(getContext(), "✅ Password changed in Firebase Auth, but failed to sync to database. Please contact administrator.", Toast.LENGTH_LONG).show();
+                                        });
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    // Email not found in RTDB - password still updated in Firebase Auth
+                    Toast.makeText(getContext(), "✅ Password changed in Firebase Auth, but email not found in database.", Toast.LENGTH_LONG).show();
+                }
+                
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    Toast.makeText(getContext(), "✅ Password changed in Firebase Auth, but failed to sync to database.", Toast.LENGTH_LONG).show();
+                }
+            });
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "✅ Password changed in Firebase Auth, but failed to sync to database.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void showProfilePictureDialog() {
@@ -451,49 +571,70 @@ public class PharmacistProfileFragment extends Fragment {
      * Upload profile picture to Firebase Storage
      */
     private void uploadProfilePicture(Uri imageUri) {
-        if (imageUri == null || storageReference == null) {
+        if (imageUri == null || getContext() == null) {
             Toast.makeText(getContext(), "Error: Invalid image", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        Toast.makeText(getContext(), "Uploading profile picture...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getContext(), "Converting and uploading profile picture...", Toast.LENGTH_SHORT).show();
         
-        try {
-            // Create reference to profile pictures folder
-            String fileName = "profile_" + loggedInEmployeeId + "_" + System.currentTimeMillis() + ".jpg";
-            StorageReference profileRef = storageReference.child("profile_pictures/" + fileName);
-            
-            // Upload file directly from URI
-            UploadTask uploadTask = profileRef.putFile(imageUri);
-            
-            uploadTask.addOnSuccessListener(taskSnapshot -> {
-                // Get download URL
-                profileRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                    String downloadUrl = uri.toString();
-                    
-                    // Update database with profile picture URL
-                    boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, downloadUrl);
-                    
-                    if (updated) {
-                        // Update current pharmacist object
-                        currentPharmacist.setProfilePictureUrl(downloadUrl);
-                        
-                        // Load the new image
-                        loadProfilePicture(downloadUrl);
-                        
-                        Toast.makeText(getContext(), "✅ Profile picture updated successfully!", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(getContext(), "❌ Failed to update profile picture in database", Toast.LENGTH_SHORT).show();
+        // Convert image to base64 string in background thread
+        new Thread(() -> {
+            try {
+                String base64Image = ImageUtils.convertImageUriToBase64(getContext(), imageUri);
+                
+                if (base64Image == null || base64Image.isEmpty()) {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            Toast.makeText(getContext(), "❌ Failed to convert image. Please try again.", Toast.LENGTH_SHORT).show();
+                        });
                     }
-                }).addOnFailureListener(e -> {
-                    Toast.makeText(getContext(), "❌ Error getting download URL: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                });
-            }).addOnFailureListener(e -> {
-                Toast.makeText(getContext(), "❌ Error uploading image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            });
+                    return;
+                }
+                
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, base64Image);
+                        
+                        if (updated) {
+                            currentPharmacist.setProfilePictureUrl(base64Image);
+                            loadProfilePicture(base64Image);
+                            syncProfilePictureToFirebase(base64Image);
+                            Toast.makeText(getContext(), "✅ Profile picture updated successfully!", Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(getContext(), "❌ Failed to update profile picture in database", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+                
+            } catch (Exception e) {
+                android.util.Log.e("PharmacistProfile", "❌ Error converting image: " + e.getMessage(), e);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        Toast.makeText(getContext(), "❌ Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    /**
+     * Sync profile picture base64 string to Firebase RTDB
+     */
+    private void syncProfilePictureToFirebase(String base64Image) {
+        try {
+            FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
+            DatabaseReference employeeRef = database.getReference("employees").child(loggedInEmployeeId);
             
+            employeeRef.child("profile_picture_url").setValue(base64Image)
+                .addOnSuccessListener(aVoid -> {
+                    android.util.Log.d("PharmacistProfile", "✅ Profile picture synced to Firebase RTDB");
+                })
+                .addOnFailureListener(e -> {
+                    android.util.Log.e("PharmacistProfile", "❌ Failed to sync profile picture to Firebase: " + e.getMessage());
+                });
         } catch (Exception e) {
-            Toast.makeText(getContext(), "❌ Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            android.util.Log.e("PharmacistProfile", "❌ Error syncing to Firebase: " + e.getMessage(), e);
         }
     }
     

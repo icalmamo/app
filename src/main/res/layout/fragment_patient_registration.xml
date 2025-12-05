@@ -705,13 +705,16 @@
                             app:boxCornerRadiusBottomStart="12dp"
                             app:boxCornerRadiusBottomEnd="12dp"
                             app:boxStrokeWidth="1dp"
-                            app:boxStrokeColor="#E0E0E0">
-                            <com.google.android.material.textfield.TextInputEditText
+                            app:boxStrokeColor="#E0E0E0"
+                            app:endIconMode="dropdown_menu">
+                            <AutoCompleteTextView
                                 android:id="@+id/inputPainScale"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:textSize="16sp"
-                                android:inputType="number"
+                                android:inputType="none"
+                                android:focusable="false"
+                                android:clickable="true"
                                 android:minHeight="56dp"
                                 android:paddingStart="16dp"
                                 android:paddingEnd="16dp" />

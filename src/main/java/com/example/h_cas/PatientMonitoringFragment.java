@@ -19,7 +19,12 @@ import com.example.h_cas.database.HCasDatabaseHelper;
 import com.example.h_cas.database.FirebaseRTDBHelper;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.text.SimpleDateFormat;
+import java.text.ParseException;
+import java.util.Date;
 
 /**
  * PatientMonitoringFragment handles patient monitoring functionality for nurses.
@@ -48,6 +53,8 @@ public class PatientMonitoringFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         
+        android.util.Log.d("PatientMonitoring", "🔄 onViewCreated called");
+        
         // Initialize UI components
         initializeViews(view);
         
@@ -62,6 +69,16 @@ public class PatientMonitoringFragment extends Fragment {
         
         // Initialize patient monitoring functionality
         initializePatientMonitoring();
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        android.util.Log.d("PatientMonitoring", "🔄 onResume called - refreshing patient list");
+        // Refresh patient list when fragment becomes visible
+        if (patientList != null && patientAdapter != null) {
+            loadPatients();
+        }
     }
     
     /**
@@ -85,54 +102,109 @@ public class PatientMonitoringFragment extends Fragment {
      * Setup RecyclerView for patient list display
      */
     private void setupRecyclerView() {
+        if (recyclerViewPatients == null) {
+            android.util.Log.e("PatientMonitoring", "❌ RecyclerView is null!");
+            return;
+        }
+        
         patientList = new ArrayList<>();
         patientAdapter = new PatientAdapter(patientList);
         
-        recyclerViewPatients.setLayoutManager(new LinearLayoutManager(getContext()));
+        LinearLayoutManager layoutManager = new LinearLayoutManager(getContext());
+        layoutManager.setOrientation(LinearLayoutManager.VERTICAL);
+        recyclerViewPatients.setLayoutManager(layoutManager);
         recyclerViewPatients.setAdapter(patientAdapter);
         // Performance optimizations
-        recyclerViewPatients.setHasFixedSize(true); // RecyclerView size doesn't change
+        recyclerViewPatients.setHasFixedSize(false); // Allow RecyclerView to resize when inside ScrollView
         recyclerViewPatients.setItemViewCacheSize(20); // Cache more views for smoother scrolling
+        recyclerViewPatients.setNestedScrollingEnabled(true); // Enable nested scrolling for NestedScrollView
+        
+        android.util.Log.d("PatientMonitoring", "✅ RecyclerView setup complete");
     }
     
     /**
      * Load patients from Firebase RTDB (primary source)
      */
     private void loadPatients() {
+        android.util.Log.d("PatientMonitoring", "🔄 Starting to load patients...");
+        
+        // Show loading state
+        if (textViewMonitoringStatus != null) {
+            textViewMonitoringStatus.setText("Status: Loading patients...");
+        }
+        
         // Fetch patients from Firebase RTDB
         if (firebaseRTDBHelper != null) {
+            android.util.Log.d("PatientMonitoring", "📊 Fetching from Firebase RTDB...");
             firebaseRTDBHelper.getAllPatients(patients -> {
+                android.util.Log.d("PatientMonitoring", "✅ Firebase callback received: " + (patients != null ? patients.size() : 0) + " patients");
+                
+                // Create final copy of patients list for use in lambda
+                List<Patient> finalPatients = patients != null ? new ArrayList<>(patients) : new ArrayList<>();
+                
+                // Sort patients by created_date (newest first)
+                sortPatientsByDate(finalPatients);
+                
                 // Update UI on main thread
-                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                    if (getContext() == null || getView() == null) {
-                        return; // Fragment is detached
-                    }
-                    // Use efficient DiffUtil update instead of notifyDataSetChanged
-                    patientAdapter.setPatients(patients);
-                    patientList.clear();
-                    patientList.addAll(patients);
-                    
-                    updatePatientCount();
-                    updateMonitoringStatus();
-                });
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (getContext() == null || getView() == null) {
+                            android.util.Log.w("PatientMonitoring", "⚠️ Fragment is detached, skipping UI update");
+                            return; // Fragment is detached
+                        }
+                        
+                        android.util.Log.d("PatientMonitoring", "📋 Updating UI with " + finalPatients.size() + " patients (sorted by date)");
+                        
+                        // Use efficient DiffUtil update instead of notifyDataSetChanged
+                        if (patientAdapter != null) {
+                            patientAdapter.setPatients(finalPatients);
+                        }
+                        if (patientList != null) {
+                            patientList.clear();
+                            patientList.addAll(finalPatients);
+                        }
+                        
+                        updatePatientCount();
+                        updateMonitoringStatus();
+                        
+                        android.util.Log.d("PatientMonitoring", "✅ UI updated successfully");
+                    });
+                } else {
+                    android.util.Log.w("PatientMonitoring", "⚠️ Activity is null, cannot update UI");
+                }
             });
         } else {
+            android.util.Log.w("PatientMonitoring", "⚠️ FirebaseRTDBHelper is null, falling back to SQLite");
             // Fallback to SQLite if Firebase not available
             com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
                 List<Patient> patients = databaseHelper.getAllPatients();
+                android.util.Log.d("PatientMonitoring", "📊 SQLite returned: " + (patients != null ? patients.size() : 0) + " patients");
+                
+                // Create final copy of patients list for use in lambda
+                List<Patient> finalPatients = patients != null ? new ArrayList<>(patients) : new ArrayList<>();
+                
+                // Sort patients by created_date (newest first)
+                sortPatientsByDate(finalPatients);
                 
                 // Update UI on main thread
-                com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
-                    if (getContext() == null || getView() == null) {
-                        return; // Fragment is detached
-                    }
-                    patientAdapter.setPatients(patients);
-                    patientList.clear();
-                    patientList.addAll(patients);
-                    
-                    updatePatientCount();
-                    updateMonitoringStatus();
-                });
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (getContext() == null || getView() == null) {
+                            return; // Fragment is detached
+                        }
+                        
+                        if (patientAdapter != null) {
+                            patientAdapter.setPatients(finalPatients);
+                        }
+                        if (patientList != null) {
+                            patientList.clear();
+                            patientList.addAll(finalPatients);
+                        }
+                        
+                        updatePatientCount();
+                        updateMonitoringStatus();
+                    });
+                }
             });
         }
     }
@@ -156,6 +228,65 @@ public class PatientMonitoringFragment extends Fragment {
             textViewMonitoringStatus.setText("Status: Monitoring active - " + patientList.size() + " patients");
             textViewMonitoringStatus.setTextColor(getResources().getColor(R.color.success_green));
         }
+    }
+    
+    /**
+     * Sort patients by created_date in descending order (newest first)
+     * Falls back to patient ID if created_date is not available
+     */
+    private void sortPatientsByDate(List<Patient> patients) {
+        if (patients == null || patients.isEmpty()) {
+            return;
+        }
+        
+        Collections.sort(patients, new Comparator<Patient>() {
+            @Override
+            public int compare(Patient p1, Patient p2) {
+                // Try to compare by created_date first
+                String date1 = p1.getCreatedDate();
+                String date2 = p2.getCreatedDate();
+                
+                if (date1 != null && !date1.isEmpty() && date2 != null && !date2.isEmpty()) {
+                    try {
+                        // Parse date in format "yyyy-MM-dd HH:mm:ss"
+                        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault());
+                        Date d1 = sdf.parse(date1);
+                        Date d2 = sdf.parse(date2);
+                        
+                        // Compare in descending order (newest first)
+                        return d2.compareTo(d1);
+                    } catch (ParseException e) {
+                        android.util.Log.w("PatientMonitoring", "⚠️ Error parsing date: " + e.getMessage());
+                        // Fall through to patient ID comparison
+                    }
+                }
+                
+                // Fallback: compare by patient ID (which contains timestamp)
+                // Patient IDs are like "PAT1234567890" where numbers are timestamp
+                String id1 = p1.getPatientId();
+                String id2 = p2.getPatientId();
+                
+                if (id1 != null && id2 != null) {
+                    // Extract numeric part from patient ID (after "PAT")
+                    try {
+                        String num1 = id1.replace("PAT", "");
+                        String num2 = id2.replace("PAT", "");
+                        long timestamp1 = Long.parseLong(num1);
+                        long timestamp2 = Long.parseLong(num2);
+                        // Compare in descending order (newest first)
+                        return Long.compare(timestamp2, timestamp1);
+                    } catch (NumberFormatException e) {
+                        // If parsing fails, just compare strings
+                        return id2.compareTo(id1);
+                    }
+                }
+                
+                // Last resort: keep original order
+                return 0;
+            }
+        });
+        
+        android.util.Log.d("PatientMonitoring", "✅ Sorted " + patients.size() + " patients by date (newest first)");
     }
 
     /**
@@ -192,13 +323,28 @@ public class PatientMonitoringFragment extends Fragment {
                 newPatients = new ArrayList<>();
             }
             
-            // Use DiffUtil for efficient updates (only updates changed items)
-            androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
-                androidx.recyclerview.widget.DiffUtil.calculateDiff(new PatientDiffCallback(this.patients, newPatients));
+            android.util.Log.d("PatientAdapter", "📋 setPatients called with " + newPatients.size() + " patients");
+            android.util.Log.d("PatientAdapter", "📋 Current patients count: " + this.patients.size());
             
-            this.patients.clear();
-            this.patients.addAll(newPatients);
-            diffResult.dispatchUpdatesTo(this);
+            // Use DiffUtil for efficient updates (only updates changed items)
+            try {
+                androidx.recyclerview.widget.DiffUtil.DiffResult diffResult = 
+                    androidx.recyclerview.widget.DiffUtil.calculateDiff(new PatientDiffCallback(this.patients, newPatients));
+                
+                this.patients.clear();
+                this.patients.addAll(newPatients);
+                diffResult.dispatchUpdatesTo(this);
+                
+                android.util.Log.d("PatientAdapter", "✅ DiffUtil update completed");
+            } catch (Exception e) {
+                android.util.Log.e("PatientAdapter", "❌ Error in DiffUtil, using notifyDataSetChanged: " + e.getMessage());
+                // Fallback to notifyDataSetChanged if DiffUtil fails
+                this.patients.clear();
+                this.patients.addAll(newPatients);
+                notifyDataSetChanged();
+            }
+            
+            android.util.Log.d("PatientAdapter", "📋 Final patients count: " + this.patients.size());
         }
         
         // DiffUtil callback for efficient RecyclerView updates
@@ -251,10 +397,13 @@ public class PatientMonitoringFragment extends Fragment {
         
         @Override
         public int getItemCount() {
-            return patients.size();
+            int count = patients != null ? patients.size() : 0;
+            android.util.Log.d("PatientAdapter", "📊 getItemCount: " + count);
+            return count;
         }
         
         class PatientViewHolder extends RecyclerView.ViewHolder {
+            private View viewPatientAvatar;
             private TextView textPatientIcon;
             private TextView textPatientNumber;
             private TextView textPatientName;
@@ -263,6 +412,7 @@ public class PatientMonitoringFragment extends Fragment {
             
             public PatientViewHolder(@NonNull View itemView) {
                 super(itemView);
+                viewPatientAvatar = itemView.findViewById(R.id.viewPatientAvatar);
                 textPatientIcon = itemView.findViewById(R.id.textPatientIcon);
                 textPatientNumber = itemView.findViewById(R.id.textPatientNumber);
                 textPatientName = itemView.findViewById(R.id.textPatientName);
@@ -290,13 +440,13 @@ public class PatientMonitoringFragment extends Fragment {
                 }
                 if (patient.getAge() != null && !patient.getAge().isEmpty()) {
                     if (demographics.length() > 0) demographics.append(" • ");
-                    demographics.append("Age: ").append(patient.getAge());
+                    demographics.append(patient.getAge()).append(" years");
                 }
                 if (patient.getDateOfBirth() != null && !patient.getDateOfBirth().isEmpty()) {
                     if (demographics.length() > 0) demographics.append(" • ");
-                    demographics.append("DOB: ").append(patient.getDateOfBirth());
+                    demographics.append(patient.getDateOfBirth());
                 }
-                textPatientGender.setText(demographics.toString());
+                textPatientGender.setText(demographics.length() > 0 ? demographics.toString() : "No information");
                 
                 // 4. COMPREHENSIVE REGISTRATION DATA
                 StringBuilder registrationData = new StringBuilder();
@@ -381,7 +531,42 @@ public class PatientMonitoringFragment extends Fragment {
                 
                 // Status based on complete registration data
                 String status = getRegistrationStatus(patient);
-                textPatientStatus.setText(status);
+                // Shorten status text for badge
+                String shortStatus = status;
+                if (status.contains("Complete Registration")) {
+                    shortStatus = "Complete";
+                } else if (status.contains("Nearly Complete")) {
+                    shortStatus = "Nearly Complete";
+                } else if (status.contains("Partial")) {
+                    shortStatus = "Partial";
+                } else if (status.contains("Incomplete")) {
+                    shortStatus = "Incomplete";
+                } else if (status.contains("Has Allergies")) {
+                    shortStatus = "Allergies";
+                } else if (status.contains("Urgent")) {
+                    shortStatus = "Urgent";
+                } else if (status.contains("Patient Status")) {
+                    shortStatus = "Active";
+                }
+                textPatientStatus.setText(shortStatus);
+                
+                // Update badge color based on status
+                if (status.contains("Complete") || status.contains("✅")) {
+                    textPatientStatus.setBackgroundResource(R.drawable.status_badge_background);
+                    textPatientStatus.setTextColor(android.graphics.Color.WHITE);
+                } else if (status.contains("Urgent") || status.contains("🚨")) {
+                    textPatientStatus.setBackgroundColor(0xFFF44336); // Red
+                    textPatientStatus.setTextColor(android.graphics.Color.WHITE);
+                } else if (status.contains("Allergies") || status.contains("⚠️")) {
+                    textPatientStatus.setBackgroundColor(0xFFFF9800); // Orange
+                    textPatientStatus.setTextColor(android.graphics.Color.WHITE);
+                } else if (status.contains("Nearly Complete") || status.contains("🟡")) {
+                    textPatientStatus.setBackgroundColor(0xFFFFC107); // Yellow
+                    textPatientStatus.setTextColor(android.graphics.Color.BLACK);
+                } else {
+                    textPatientStatus.setBackgroundColor(0xFF9E9E9E); // Gray
+                    textPatientStatus.setTextColor(android.graphics.Color.WHITE);
+                }
                 
                 // Set up click listener for the entire card
                 itemView.setOnClickListener(v -> showPatientDetails(patient));
@@ -428,47 +613,69 @@ public class PatientMonitoringFragment extends Fragment {
                 if (patient.getEmail() != null && !patient.getEmail().isEmpty()) {
                     details.append("Email: ").append(patient.getEmail()).append("\n");
                 }
-                if (patient.getAddress() != null && !patient.getAddress().isEmpty()) {
-                    details.append("Address: ").append(patient.getAddress()).append("\n");
+                // Check both getAddress() and getFullAddress() for address
+                String address = null;
+                if (patient.getFullAddress() != null && !patient.getFullAddress().isEmpty()) {
+                    address = patient.getFullAddress();
+                } else if (patient.getAddress() != null && !patient.getAddress().isEmpty()) {
+                    address = patient.getAddress();
+                }
+                if (address != null && !address.isEmpty()) {
+                    details.append("Address: ").append(address).append("\n");
+                } else {
+                    details.append("Address: N/A\n");
                 }
                 
                 // Health Information Section
                 details.append("\n🏥 HEALTH INFORMATION\n");
                 details.append("─────────────────────────\n");
-                if (patient.getAllergies() != null && !patient.getAllergies().isEmpty()) {
-                    details.append("Allergies: ").append(patient.getAllergies()).append("\n");
-                }
-                if (patient.getMedications() != null && !patient.getMedications().isEmpty()) {
-                    details.append("Medications: ").append(patient.getMedications()).append("\n");
-                }
-                if (patient.getMedicalHistory() != null && !patient.getMedicalHistory().isEmpty()) {
-                    details.append("Medical History: ").append(patient.getMedicalHistory()).append("\n");
-                }
+                String allergies = (patient.getAllergies() != null && !patient.getAllergies().isEmpty()) 
+                    ? patient.getAllergies() : "None";
+                details.append("Allergies: ").append(allergies).append("\n");
+                
+                String medications = (patient.getMedications() != null && !patient.getMedications().isEmpty()) 
+                    ? patient.getMedications() : "None";
+                details.append("Medications: ").append(medications).append("\n");
+                
+                String medicalHistory = (patient.getMedicalHistory() != null && !patient.getMedicalHistory().isEmpty()) 
+                    ? patient.getMedicalHistory() : "None";
+                details.append("Medical History: ").append(medicalHistory).append("\n");
                 
                 // Vital Signs Section
                 details.append("\n🩺 VITAL SIGNS\n");
                 details.append("─────────────────────────\n");
+                boolean hasVitals = false;
                 if (patient.getTemperature() != null && !patient.getTemperature().isEmpty()) {
                     details.append("Temperature: ").append(patient.getTemperature()).append("°C\n");
+                    hasVitals = true;
                 }
                 if (patient.getPulseRate() != null && !patient.getPulseRate().isEmpty()) {
                     details.append("Pulse Rate: ").append(patient.getPulseRate()).append(" BPM\n");
+                    hasVitals = true;
                 }
                 if (patient.getBloodPressure() != null && !patient.getBloodPressure().isEmpty()) {
                     details.append("Blood Pressure: ").append(patient.getBloodPressure()).append("\n");
+                    hasVitals = true;
                 }
                 if (patient.getBloodSugar() != null && !patient.getBloodSugar().isEmpty()) {
                     details.append("Blood Sugar: ").append(patient.getBloodSugar()).append(" mg/dL\n");
+                    hasVitals = true;
                 }
                 if (patient.getPainScale() != null && !patient.getPainScale().isEmpty()) {
                     details.append("Pain Scale: ").append(patient.getPainScale()).append("/10\n");
+                    hasVitals = true;
+                }
+                if (!hasVitals) {
+                    details.append("No vital signs recorded\n");
                 }
                 
                 // Symptoms Section
+                details.append("\n🤒 CURRENT SYMPTOMS\n");
+                details.append("─────────────────────────\n");
                 if (patient.getSymptomsDescription() != null && !patient.getSymptomsDescription().isEmpty()) {
-                    details.append("\n🤒 CURRENT SYMPTOMS\n");
-                    details.append("─────────────────────────\n");
                     details.append(patient.getSymptomsDescription()).append("\n");
+                } else {
+                    details.append("No symptoms recorded\n");
                 }
                 
                 // Emergency Contact Section

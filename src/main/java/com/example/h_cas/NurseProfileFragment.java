@@ -24,9 +24,12 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.provider.MediaStore;
 
-import com.google.firebase.storage.FirebaseStorage;
-import com.google.firebase.storage.StorageReference;
-import com.google.firebase.storage.UploadTask;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
+import com.example.h_cas.utils.ImageUtils;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -57,15 +60,8 @@ public class NurseProfileFragment extends Fragment {
     private TextInputEditText inputPhone;
     private TextInputEditText inputAddress;
     
-    // Professional Information Fields
-    private TextInputEditText inputLicenseNumber;
-    private TextInputEditText inputSpecialization;
-    private TextInputEditText inputExperience;
-    private TextInputEditText inputDepartment;
-    
     // Buttons
     private MaterialButton editPersonalInfoButton;
-    private MaterialButton editProfessionalInfoButton;
     private MaterialButton changePasswordButton;
     private MaterialButton saveProfileButton;
     
@@ -79,12 +75,9 @@ public class NurseProfileFragment extends Fragment {
     
     // Edit States
     private boolean isPersonalInfoEditable = false;
-    private boolean isProfessionalInfoEditable = false;
     
     // Profile Picture
     private ActivityResultLauncher<Intent> imagePickerLauncher;
-    private FirebaseStorage storage;
-    private StorageReference storageReference;
 
     @Nullable
     @Override
@@ -95,10 +88,6 @@ public class NurseProfileFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        
-        // Initialize Firebase Storage
-        storage = FirebaseStorage.getInstance();
-        storageReference = storage.getReference();
         
         // Initialize nurse profile functionality
         initializeViews(view);
@@ -145,15 +134,8 @@ public class NurseProfileFragment extends Fragment {
         inputPhone = view.findViewById(R.id.inputPhone);
         inputAddress = view.findViewById(R.id.inputAddress);
         
-        // Professional information fields
-        inputLicenseNumber = view.findViewById(R.id.inputLicenseNumber);
-        inputSpecialization = view.findViewById(R.id.inputSpecialization);
-        inputExperience = view.findViewById(R.id.inputExperience);
-        inputDepartment = view.findViewById(R.id.inputDepartment);
-        
         // Buttons
         editPersonalInfoButton = view.findViewById(R.id.editPersonalInfoButton);
-        editProfessionalInfoButton = view.findViewById(R.id.editProfessionalInfoButton);
         changePasswordButton = view.findViewById(R.id.changePasswordButton);
         saveProfileButton = view.findViewById(R.id.saveProfileButton);
     }
@@ -193,9 +175,6 @@ public class NurseProfileFragment extends Fragment {
         // Edit Personal Info Button
         editPersonalInfoButton.setOnClickListener(v -> togglePersonalInfoEdit());
         
-        // Edit Professional Info Button
-        editProfessionalInfoButton.setOnClickListener(v -> toggleProfessionalInfoEdit());
-        
         // Change Password Button
         changePasswordButton.setOnClickListener(v -> showChangePasswordDialog());
         
@@ -232,15 +211,8 @@ public class NurseProfileFragment extends Fragment {
                 inputPhone.setText(currentNurse.getPhone());
                 inputAddress.setText(currentNurse.getAddress());
                 
-                // Load professional information (these might be empty initially)
-                inputLicenseNumber.setText(currentNurse.getLicenseNumber() != null ? currentNurse.getLicenseNumber() : "");
-                inputSpecialization.setText(currentNurse.getSpecialization() != null ? currentNurse.getSpecialization() : "");
-                inputExperience.setText(currentNurse.getExperience() != null ? currentNurse.getExperience() : "");
-                inputDepartment.setText(currentNurse.getDepartment() != null ? currentNurse.getDepartment() : "");
-                
                 // Set fields as read-only initially
                 setPersonalInfoEditable(false);
-                setProfessionalInfoEditable(false);
                 
                 // Load profile picture if available
                 if (currentNurse.getProfilePictureUrl() != null && !currentNurse.getProfilePictureUrl().isEmpty()) {
@@ -258,9 +230,74 @@ public class NurseProfileFragment extends Fragment {
     }
     
     /**
-     * Load profile picture from URL
+     * Load profile picture from base64 string or URL (backward compatibility)
      */
-    private void loadProfilePicture(String imageUrl) {
+    private void loadProfilePicture(String imageData) {
+        if (imageData == null || imageData.isEmpty() || profileImageView == null) {
+            // Set default avatar
+            if (profileImageView != null) {
+                profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+            }
+            return;
+        }
+        
+        // Check if it's a base64 string
+        if (ImageUtils.isBase64Image(imageData)) {
+            // Load from base64 string
+            loadProfilePictureFromBase64(imageData);
+        } else if (ImageUtils.isUrl(imageData)) {
+            // Load from URL (backward compatibility)
+            loadProfilePictureFromUrl(imageData);
+        } else {
+            // Unknown format, try base64 first
+            loadProfilePictureFromBase64(imageData);
+        }
+    }
+    
+    /**
+     * Load profile picture from base64 string
+     */
+    private void loadProfilePictureFromBase64(String base64String) {
+        if (base64String == null || base64String.isEmpty() || profileImageView == null) {
+            if (profileImageView != null) {
+                profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+            }
+            return;
+        }
+        
+        // Convert base64 to bitmap in background thread
+        new Thread(() -> {
+            try {
+                Bitmap bitmap = ImageUtils.convertBase64ToBitmap(base64String);
+                
+                // Update UI on main thread
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (profileImageView != null && bitmap != null) {
+                            profileImageView.setImageBitmap(bitmap);
+                        } else {
+                            profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                android.util.Log.e("NurseProfile", "❌ Error loading base64 image: " + e.getMessage(), e);
+                // Fallback to default avatar
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        if (profileImageView != null) {
+                            profileImageView.setImageResource(R.drawable.ic_nurse_avatar);
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    /**
+     * Load profile picture from URL (backward compatibility)
+     */
+    private void loadProfilePictureFromUrl(String imageUrl) {
         if (imageUrl == null || imageUrl.isEmpty() || profileImageView == null) {
             return;
         }
@@ -321,24 +358,6 @@ public class NurseProfileFragment extends Fragment {
     }
 
     /**
-     * Toggle professional information edit mode
-     */
-    private void toggleProfessionalInfoEdit() {
-        isProfessionalInfoEditable = !isProfessionalInfoEditable;
-        setProfessionalInfoEditable(isProfessionalInfoEditable);
-        
-        if (isProfessionalInfoEditable) {
-            editProfessionalInfoButton.setText("Cancel");
-            editProfessionalInfoButton.setBackgroundColor(getResources().getColor(R.color.error_red));
-        } else {
-            editProfessionalInfoButton.setText("Edit");
-            editProfessionalInfoButton.setBackgroundColor(getResources().getColor(R.color.primary_blue));
-            // Reload original data
-            loadNurseProfile();
-        }
-    }
-
-    /**
      * Set personal information fields editable state
      */
     private void setPersonalInfoEditable(boolean editable) {
@@ -347,16 +366,6 @@ public class NurseProfileFragment extends Fragment {
         inputEmail.setEnabled(editable);
         inputPhone.setEnabled(editable);
         inputAddress.setEnabled(editable);
-    }
-
-    /**
-     * Set professional information fields editable state
-     */
-    private void setProfessionalInfoEditable(boolean editable) {
-        inputLicenseNumber.setEnabled(editable);
-        inputSpecialization.setEnabled(editable);
-        inputExperience.setEnabled(editable);
-        inputDepartment.setEnabled(editable);
     }
 
     /**
@@ -371,14 +380,6 @@ public class NurseProfileFragment extends Fragment {
                 currentNurse.setEmail(getText(inputEmail));
                 currentNurse.setPhone(getText(inputPhone));
                 currentNurse.setAddress(getText(inputAddress));
-            }
-            
-            // Update professional information
-            if (isProfessionalInfoEditable) {
-                currentNurse.setLicenseNumber(getText(inputLicenseNumber));
-                currentNurse.setSpecialization(getText(inputSpecialization));
-                currentNurse.setExperience(getText(inputExperience));
-                currentNurse.setDepartment(getText(inputDepartment));
             }
             
             // Save to database
@@ -396,15 +397,11 @@ public class NurseProfileFragment extends Fragment {
                 
                 // Reset edit states
                 isPersonalInfoEditable = false;
-                isProfessionalInfoEditable = false;
                 setPersonalInfoEditable(false);
-                setProfessionalInfoEditable(false);
                 
                 // Reset button states
                 editPersonalInfoButton.setText("Edit");
                 editPersonalInfoButton.setBackgroundColor(getResources().getColor(R.color.primary_blue));
-                editProfessionalInfoButton.setText("Edit");
-                editProfessionalInfoButton.setBackgroundColor(getResources().getColor(R.color.primary_blue));
                 
             } else {
                 showToast("❌ Failed to update profile");
@@ -472,27 +469,123 @@ public class NurseProfileFragment extends Fragment {
     }
 
     /**
-     * Change password in database
+     * Change password using Firebase Authentication (like forgot password feature)
      */
     private void changePassword(String currentPassword, String newPassword) {
         try {
-            // Verify current password
-            boolean isValid = databaseHelper.validateEmployeeLogin(loggedInUsername, currentPassword);
-            
-            if (isValid) {
-                // Update password
-                boolean updated = databaseHelper.updateEmployeePassword(loggedInUsername, newPassword);
-                
-                if (updated) {
-                    showToast("✅ Password changed successfully!");
-                } else {
-                    showToast("❌ Failed to change password");
-                }
-            } else {
-                showToast("❌ Current password is incorrect");
+            // Get user's email from current nurse data
+            String email = currentNurse.getEmail();
+            if (email == null || email.isEmpty()) {
+                // Try to get from input field
+                email = inputEmail.getText() != null ? inputEmail.getText().toString().trim() : null;
             }
+            
+            if (email == null || email.isEmpty() || !email.contains("@")) {
+                showToast("❌ Email address is required for password change. Please update your email first.");
+                return;
+            }
+            
+            // Create final copies for lambda expressions
+            final String finalEmail = email;
+            final String finalNewPassword = newPassword;
+            
+            FirebaseAuth auth = FirebaseAuth.getInstance();
+            if (auth == null) {
+                showToast("❌ Firebase Authentication is not available. Please try again later.");
+                return;
+            }
+            
+            // Show loading state
+            showToast("Changing password...");
+            
+            // Sign in with current password to verify
+            auth.signInWithEmailAndPassword(finalEmail, currentPassword)
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        // Current password is correct - update to new password
+                        FirebaseUser user = auth.getCurrentUser();
+                        if (user != null) {
+                            user.updatePassword(finalNewPassword)
+                                .addOnCompleteListener(updateTask -> {
+                                    if (updateTask.isSuccessful()) {
+                                        // Password updated in Firebase Auth - sync to RTDB
+                                        syncPasswordToRTDB(finalEmail, finalNewPassword);
+                                        auth.signOut(); // Sign out after password change
+                                    } else {
+                                        Exception e = updateTask.getException();
+                                        String errorMsg = e != null ? e.getMessage() : "Failed to update password";
+                                        showToast("❌ Failed to update password: " + errorMsg);
+                                        auth.signOut();
+                                    }
+                                });
+                        } else {
+                            showToast("❌ User not found");
+                            auth.signOut();
+                        }
+                    } else {
+                        // Current password is incorrect
+                        Exception e = task.getException();
+                        String errorMsg = e != null && e.getMessage() != null ? e.getMessage() : "Current password is incorrect";
+                        if (errorMsg.contains("wrong-password") || errorMsg.contains("invalid-credential")) {
+                            showToast("❌ Current password is incorrect");
+                        } else {
+                            showToast("❌ Error: " + errorMsg);
+                        }
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    showToast("❌ Error: " + e.getMessage());
+                });
         } catch (Exception e) {
             showToast("Error changing password: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Sync password to Firebase RTDB after successful Firebase Auth update
+     */
+    private void syncPasswordToRTDB(String email, String newPassword) {
+        try {
+            DatabaseReference employeesRef = FirebaseDatabase.getInstance(
+                    "https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/")
+                    .getReference("employees");
+            
+            employeesRef.addListenerForSingleValueEvent(new com.google.firebase.database.ValueEventListener() {
+                @Override
+                public void onDataChange(com.google.firebase.database.DataSnapshot snapshot) {
+                    if (snapshot.exists() && snapshot.hasChildren()) {
+                        String normalizedEmail = email.toLowerCase().trim();
+                        
+                        for (com.google.firebase.database.DataSnapshot child : snapshot.getChildren()) {
+                            Object emailObj = child.child("email").getValue();
+                            if (emailObj != null) {
+                                String storedEmail = emailObj.toString().trim().toLowerCase();
+                                
+                                if (storedEmail.equals(normalizedEmail)) {
+                                    // Found the employee - update password in RTDB
+                                    child.getRef().child("password").setValue(newPassword)
+                                        .addOnSuccessListener(aVoid -> {
+                                            showToast("✅ Password changed successfully!");
+                                        })
+                                        .addOnFailureListener(e -> {
+                                            showToast("✅ Password changed in Firebase Auth, but failed to sync to database. Please contact administrator.");
+                                        });
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    // Email not found in RTDB - password still updated in Firebase Auth
+                    showToast("✅ Password changed in Firebase Auth, but email not found in database.");
+                }
+                
+                @Override
+                public void onCancelled(com.google.firebase.database.DatabaseError error) {
+                    showToast("✅ Password changed in Firebase Auth, but failed to sync to database.");
+                }
+            });
+        } catch (Exception e) {
+            showToast("✅ Password changed in Firebase Auth, but failed to sync to database.");
         }
     }
 
@@ -551,52 +644,83 @@ public class NurseProfileFragment extends Fragment {
     }
     
     /**
-     * Upload profile picture to Firebase Storage
+     * Upload profile picture - Convert to base64 and store in Firebase RTDB
      */
     private void uploadProfilePicture(Uri imageUri) {
-        if (imageUri == null || storageReference == null) {
+        if (imageUri == null || getContext() == null) {
             showToast("Error: Invalid image");
             return;
         }
 
-        showToast("Uploading profile picture...");
+        showToast("Converting and uploading profile picture...");
         
-        try {
-            // Create reference to profile pictures folder
-            String fileName = "profile_" + loggedInEmployeeId + "_" + System.currentTimeMillis() + ".jpg";
-            StorageReference profileRef = storageReference.child("profile_pictures/" + fileName);
-            
-            // Upload file directly from URI
-            UploadTask uploadTask = profileRef.putFile(imageUri);
-            
-            uploadTask.addOnSuccessListener(taskSnapshot -> {
-                // Get download URL
-                profileRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                    String downloadUrl = uri.toString();
-                    
-                    // Update database with profile picture URL
-                    boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, downloadUrl);
-                    
-                    if (updated) {
-                        // Update current nurse object
-                        currentNurse.setProfilePictureUrl(downloadUrl);
-                        
-                        // Load the new image
-                        loadProfilePicture(downloadUrl);
-                        
-                        showToast("✅ Profile picture updated successfully!");
-                    } else {
-                        showToast("❌ Failed to update profile picture in database");
+        // Convert image to base64 string in background thread
+        new Thread(() -> {
+            try {
+                // Convert image URI to base64 string
+                String base64Image = ImageUtils.convertImageUriToBase64(getContext(), imageUri);
+                
+                if (base64Image == null || base64Image.isEmpty()) {
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() -> {
+                            showToast("❌ Failed to convert image. Please try again.");
+                        });
                     }
-                }).addOnFailureListener(e -> {
-                    showToast("❌ Error getting download URL: " + e.getMessage());
-                });
-            }).addOnFailureListener(e -> {
-                showToast("❌ Error uploading image: " + e.getMessage());
-            });
+                    return;
+                }
+                
+                // Update on main thread
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        // Update database with base64 string
+                        boolean updated = databaseHelper.updateEmployeeProfilePicture(loggedInEmployeeId, base64Image);
+                        
+                        if (updated) {
+                            // Update current nurse object
+                            currentNurse.setProfilePictureUrl(base64Image);
+                            
+                            // Load the new image from base64
+                            loadProfilePicture(base64Image);
+                            
+                            // Sync to Firebase RTDB
+                            syncProfilePictureToFirebase(base64Image);
+                            
+                            showToast("✅ Profile picture updated successfully!");
+                        } else {
+                            showToast("❌ Failed to update profile picture in database");
+                        }
+                    });
+                }
+                
+            } catch (Exception e) {
+                android.util.Log.e("NurseProfile", "❌ Error converting image: " + e.getMessage(), e);
+                if (getActivity() != null) {
+                    getActivity().runOnUiThread(() -> {
+                        showToast("❌ Error: " + e.getMessage());
+                    });
+                }
+            }
+        }).start();
+    }
+    
+    /**
+     * Sync profile picture base64 string to Firebase RTDB
+     */
+    private void syncProfilePictureToFirebase(String base64Image) {
+        try {
+            FirebaseDatabase database = FirebaseDatabase.getInstance("https://hcas-c83fa-default-rtdb.asia-southeast1.firebasedatabase.app/");
+            DatabaseReference employeeRef = database.getReference("employees").child(loggedInEmployeeId);
             
+            // Update profile picture in Firebase
+            employeeRef.child("profile_picture_url").setValue(base64Image)
+                .addOnSuccessListener(aVoid -> {
+                    android.util.Log.d("NurseProfile", "✅ Profile picture synced to Firebase RTDB");
+                })
+                .addOnFailureListener(e -> {
+                    android.util.Log.e("NurseProfile", "❌ Failed to sync profile picture to Firebase: " + e.getMessage());
+                });
         } catch (Exception e) {
-            showToast("❌ Error: " + e.getMessage());
+            android.util.Log.e("NurseProfile", "❌ Error syncing to Firebase: " + e.getMessage(), e);
         }
     }
     

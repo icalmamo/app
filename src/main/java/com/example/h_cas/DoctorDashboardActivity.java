@@ -27,8 +27,14 @@ import com.example.h_cas.utils.NotificationDropdownHelper;
 
 import com.google.firebase.database.ChildEventListener;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -189,14 +195,89 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                 // Process on background thread
                 com.example.h_cas.utils.DatabaseExecutor.getInstance().execute(() -> {
                     try {
+                        // Sort patients by createdDate descending (latest first)
+                        // If dates are the same, use patient ID as secondary sort (newer IDs first)
+                        Collections.sort(patients, new Comparator<com.example.h_cas.models.Patient>() {
+                            @Override
+                            public int compare(com.example.h_cas.models.Patient p1, com.example.h_cas.models.Patient p2) {
+                                String date1 = p1.getCreatedDate();
+                                String date2 = p2.getCreatedDate();
+                                
+                                if (date1 == null && date2 == null) {
+                                    // Both null - use patient ID as tiebreaker (descending)
+                                    String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                    String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                    return id2.compareTo(id1);
+                                }
+                                if (date1 == null) return 1; // null dates go to end
+                                if (date2 == null) return -1;
+                                
+                                try {
+                                    // Try multiple date formats
+                                    SimpleDateFormat[] formats = {
+                                        new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()),
+                                        new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()),
+                                        new SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.getDefault()),
+                                        new SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
+                                    };
+                                    
+                                    Date d1 = null, d2 = null;
+                                    for (SimpleDateFormat sdf : formats) {
+                                        try {
+                                            if (d1 == null) d1 = sdf.parse(date1);
+                                            if (d2 == null) d2 = sdf.parse(date2);
+                                            if (d1 != null && d2 != null) break;
+                                        } catch (ParseException e) {
+                                            // Try next format
+                                        }
+                                    }
+                                    
+                                    if (d1 != null && d2 != null) {
+                                        int dateCompare = d2.compareTo(d1); // Descending order (latest first)
+                                        // If dates are equal, use patient ID as tiebreaker
+                                        if (dateCompare == 0) {
+                                            String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                            String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                            return id2.compareTo(id1); // Descending (newer IDs first)
+                                        }
+                                        return dateCompare;
+                                    } else {
+                                        // If parsing fails, compare as strings (descending)
+                                        int stringCompare = date2.compareTo(date1);
+                                        if (stringCompare == 0) {
+                                            // Same date string - use patient ID
+                                            String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                            String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                            return id2.compareTo(id1);
+                                        }
+                                        return stringCompare;
+                                    }
+                                } catch (Exception e) {
+                                    android.util.Log.e("DoctorDashboard", "Error comparing dates: " + date1 + " vs " + date2, e);
+                                    // If parsing fails, compare as strings (descending)
+                                    int stringCompare = date2.compareTo(date1);
+                                    if (stringCompare == 0) {
+                                        // Same date string - use patient ID
+                                        String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                        String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                        return id2.compareTo(id1);
+                                    }
+                                    return stringCompare;
+                                }
+                            }
+                        });
+                        
+                        android.util.Log.d("DoctorDashboard", "Sorted " + patients.size() + " patients. First patient date: " + 
+                            (patients.size() > 0 && patients.get(0).getCreatedDate() != null ? patients.get(0).getCreatedDate() : "null"));
+                        
                         // Convert patients to notifications
                         java.util.List<Notification> notifications = new java.util.ArrayList<>();
                         synchronized (knownPatientIds) {
                             knownPatientIds.clear();
                         }
                         
-                        // Limit to recent 10 patients
-                        int count = Math.min(patients.size(), 10);
+                        // Show ALL patients (not limited to 10)
+                        int count = patients.size();
                         for (int i = 0; i < count; i++) {
                             com.example.h_cas.models.Patient patient = patients.get(i);
                             if (patient.getPatientId() != null) {
@@ -209,8 +290,11 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                                 : (patient.getFirstName() + " " + patient.getLastName()).trim();
                             
                             String message = "New patient registered: " + patientName;
-                            String timestamp = patient.getCreatedDate() != null ? 
-                                formatTimestamp(patient.getCreatedDate()) : "Recently";
+                            String originalDate = patient.getCreatedDate();
+                            String timestamp = originalDate != null ? 
+                                formatTimestamp(originalDate) : "Recently";
+                            
+                            android.util.Log.d("DoctorDashboard", "Notification for " + patientName + ": original=" + originalDate + ", formatted=" + timestamp);
                             
                             Notification notif = new Notification(
                                 patient.getPatientId(),
@@ -225,8 +309,11 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                         com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
                             if (notificationDropdownHelper != null) {
                                 notificationDropdownHelper.setNotifications(notifications);
+                                // Badge should show unread count, not total count
+                                updateNotificationBadge(notificationDropdownHelper.getUnreadNotificationCount());
+                            } else {
+                                updateNotificationBadge(notifications.size());
                             }
-                            updateNotificationBadge(notifications.size());
                             subscribeToNewPatientNotifications();
                         });
                     } catch (Exception e) {
@@ -242,14 +329,89 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                     List<com.example.h_cas.models.Patient> patients = databaseHelper != null ? 
                         databaseHelper.getAllPatients() : new java.util.ArrayList<>();
                     
+                    // Sort patients by createdDate descending (latest first)
+                    // If dates are the same, use patient ID as secondary sort (newer IDs first)
+                    Collections.sort(patients, new Comparator<com.example.h_cas.models.Patient>() {
+                        @Override
+                        public int compare(com.example.h_cas.models.Patient p1, com.example.h_cas.models.Patient p2) {
+                            String date1 = p1.getCreatedDate();
+                            String date2 = p2.getCreatedDate();
+                            
+                            if (date1 == null && date2 == null) {
+                                // Both null - use patient ID as tiebreaker (descending)
+                                String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                return id2.compareTo(id1);
+                            }
+                            if (date1 == null) return 1; // null dates go to end
+                            if (date2 == null) return -1;
+                            
+                            try {
+                                // Try multiple date formats
+                                SimpleDateFormat[] formats = {
+                                    new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()),
+                                    new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()),
+                                    new SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.getDefault()),
+                                    new SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
+                                };
+                                
+                                Date d1 = null, d2 = null;
+                                for (SimpleDateFormat sdf : formats) {
+                                    try {
+                                        if (d1 == null) d1 = sdf.parse(date1);
+                                        if (d2 == null) d2 = sdf.parse(date2);
+                                        if (d1 != null && d2 != null) break;
+                                    } catch (ParseException e) {
+                                        // Try next format
+                                    }
+                                }
+                                
+                                if (d1 != null && d2 != null) {
+                                    int dateCompare = d2.compareTo(d1); // Descending order (latest first)
+                                    // If dates are equal, use patient ID as tiebreaker
+                                    if (dateCompare == 0) {
+                                        String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                        String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                        return id2.compareTo(id1); // Descending (newer IDs first)
+                                    }
+                                    return dateCompare;
+                                } else {
+                                    // If parsing fails, compare as strings (descending)
+                                    int stringCompare = date2.compareTo(date1);
+                                    if (stringCompare == 0) {
+                                        // Same date string - use patient ID
+                                        String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                        String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                        return id2.compareTo(id1);
+                                    }
+                                    return stringCompare;
+                                }
+                            } catch (Exception e) {
+                                android.util.Log.e("DoctorDashboard", "Error comparing dates: " + date1 + " vs " + date2, e);
+                                // If parsing fails, compare as strings (descending)
+                                int stringCompare = date2.compareTo(date1);
+                                if (stringCompare == 0) {
+                                    // Same date string - use patient ID
+                                    String id1 = p1.getPatientId() != null ? p1.getPatientId() : "";
+                                    String id2 = p2.getPatientId() != null ? p2.getPatientId() : "";
+                                    return id2.compareTo(id1);
+                                }
+                                return stringCompare;
+                            }
+                        }
+                    });
+                    
+                    android.util.Log.d("DoctorDashboard", "Sorted " + patients.size() + " patients (SQLite). First patient date: " + 
+                        (patients.size() > 0 && patients.get(0).getCreatedDate() != null ? patients.get(0).getCreatedDate() : "null"));
+                    
                     // Convert patients to notifications
                     java.util.List<Notification> notifications = new java.util.ArrayList<>();
                     synchronized (knownPatientIds) {
                         knownPatientIds.clear();
                     }
                     
-                    // Limit to recent 10 patients
-                    int count = Math.min(patients.size(), 10);
+                    // Show ALL patients (not limited to 10)
+                    int count = patients.size();
                     for (int i = 0; i < count; i++) {
                         com.example.h_cas.models.Patient patient = patients.get(i);
                         if (patient.getPatientId() != null) {
@@ -262,8 +424,11 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                             : (patient.getFirstName() + " " + patient.getLastName()).trim();
                         
                         String message = "New patient registered: " + patientName;
-                        String timestamp = patient.getCreatedDate() != null ? 
-                            formatTimestamp(patient.getCreatedDate()) : "Recently";
+                        String originalDate = patient.getCreatedDate();
+                        String timestamp = originalDate != null ? 
+                            formatTimestamp(originalDate) : "Recently";
+                        
+                        android.util.Log.d("DoctorDashboard", "Notification (SQLite) for " + patientName + ": original=" + originalDate + ", formatted=" + timestamp);
                         
                         Notification notif = new Notification(
                             patient.getPatientId(),
@@ -271,15 +436,23 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                             message,
                             timestamp
                         );
+                        // Read status will be restored by NotificationDropdownHelper from SharedPreferences
                         notifications.add(notif);
                     }
                     
                     // Update UI on main thread
                     com.example.h_cas.utils.DatabaseExecutor.getInstance().executeOnMainThread(() -> {
                         if (notificationDropdownHelper != null) {
+                            // First, migrate all existing notifications to Firebase
+                            notificationDropdownHelper.migrateNotificationsToFirebase(notifications);
+                            
+                            // Then set notifications (will load read status from Firebase)
                             notificationDropdownHelper.setNotifications(notifications);
+                            // Badge should show unread count, not total count
+                            updateNotificationBadge(notificationDropdownHelper.getUnreadNotificationCount());
+                        } else {
+                            updateNotificationBadge(notifications.size());
                         }
-                        updateNotificationBadge(notifications.size());
                         subscribeToNewPatientNotifications();
                     });
                 } catch (Exception e) {
@@ -296,15 +469,37 @@ public class DoctorDashboardActivity extends AppCompatActivity {
         if (dateString == null || dateString.isEmpty()) {
             return "Recently";
         }
-        // Simple formatting - you can enhance this with proper date parsing
+        
         try {
-            // If dateString contains time, use it; otherwise add "Recently"
-            if (dateString.contains(" ")) {
+            // Try to parse the date string in common formats
+            SimpleDateFormat[] inputFormats = {
+                new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()),
+                new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()),
+                new SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.getDefault()),
+                new SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
+            };
+            
+            Date date = null;
+            for (SimpleDateFormat format : inputFormats) {
+                try {
+                    date = format.parse(dateString);
+                    if (date != null) break;
+                } catch (ParseException e) {
+                    // Try next format
+                }
+            }
+            
+            if (date != null) {
+                // Format for display: "yyyy-MM-dd HH:mm:ss"
+                SimpleDateFormat outputFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+                return outputFormat.format(date);
+            } else {
+                // If parsing fails, return the original string
                 return dateString;
             }
-            return dateString + " - Recently";
         } catch (Exception e) {
-            return "Recently";
+            android.util.Log.e("DoctorDashboard", "Error formatting timestamp: " + dateString, e);
+            return dateString; // Return original if formatting fails
         }
     }
 
@@ -449,17 +644,23 @@ public class DoctorDashboardActivity extends AppCompatActivity {
                     ? patient.getFullName()
                     : (patient.getFirstName() + " " + patient.getLastName()).trim();
             
+            String originalDate = patient.getCreatedDate();
+            String timestamp = originalDate != null ? formatTimestamp(originalDate) : "Recently";
+            
+            android.util.Log.d("DoctorDashboard", "New patient notification: " + patientName + " - " + timestamp);
+            
             Notification notification = new Notification(
                     patient.getPatientId(),
                     "Patient Registration",
                     "New patient registered: " + patientName,
-                    patient.getCreatedDate() != null ? formatTimestamp(patient.getCreatedDate()) : "Recently"
+                    timestamp
             );
             
             runOnUiThread(() -> {
                 if (notificationDropdownHelper != null) {
                     notificationDropdownHelper.addNotification(notification);
-                    updateNotificationBadge(notificationDropdownHelper.getTotalNotificationCount());
+                    // Badge should show unread count, not total count
+                    updateNotificationBadge(notificationDropdownHelper.getUnreadNotificationCount());
                 } else {
                     synchronized (knownPatientIds) {
                         updateNotificationBadge(knownPatientIds.size());

@@ -1,0 +1,49 @@
+[versions]
+# Android Gradle Plugin
+agp = "8.6.1"
+
+# AndroidX Core
+androidx-core = "1.15.0"
+androidx-appcompat = "1.7.0"
+androidx-activity = "1.9.2"
+androidx-constraintlayout = "2.2.0"
+androidx-material = "1.12.0"
+
+# Firebase
+google-services = "4.4.2"
+firebase-bom = "33.7.0"
+firebase-firestore = "25.0.0"
+firebase-auth = "23.0.0"
+firebase-storage = "21.0.0"
+
+# Testing
+junit = "4.13.2"
+androidx-junit = "1.2.1"
+espresso-core = "3.6.1"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
+
+[libraries]
+# AndroidX Libraries
+appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidx-appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "androidx-material" }
+activity = { group = "androidx.activity", name = "activity", version.ref = "androidx-activity" }
+constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "androidx-constraintlayout" }
+
+# Firebase
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
+
+# Testing
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-junit" }
+espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso-core" }
+
+[bundles]
+# Optional: You can create bundles for commonly used dependency groups
+androidx = ["appcompat", "material", "activity", "constraintlayout"]
+

@@ -111,27 +111,6 @@
 
         </LinearLayout>
 
-        <!-- Footer - See All Button -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/divider_grey" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/seeAllNotificationsButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:text="See all notifications"
-            android:textColor="@color/primary_blue"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:padding="12dp"
-            android:gravity="center"
-            app:icon="@drawable/ic_chevron_right"
-            app:iconGravity="end"
-            app:iconTint="@color/primary_blue" />
-
     </LinearLayout>
 
 </androidx.cardview.widget.CardView>

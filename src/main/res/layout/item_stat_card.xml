@@ -25,7 +25,15 @@
             android:textSize="36sp"
             android:textStyle="bold"
             android:textColor="#1A1A1A"
-            android:letterSpacing="0.02" />
+            android:letterSpacing="0.02"
+            android:visibility="visible" />
+
+        <ProgressBar
+            android:id="@+id/statLoadingIndicator"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:indeterminateTint="#FFFFFF"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/statLabelText"

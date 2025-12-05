@@ -82,60 +82,69 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:textSize="16sp"
-                        android:inputType="text" />
+                        android:inputType="none"
+                        android:focusable="false"
+                        android:clickable="false"
+                        android:cursorVisible="false" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <!-- Medication -->
-                <com.google.android.material.textfield.TextInputLayout
+                <!-- Medication Section -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="Medications"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <!-- Add Medication Row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="12dp"
+                    android:gravity="center_vertical">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:hint="Medication Name"
+                        app:startIconDrawable="@drawable/ic_medical_services">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/medicationInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textSize="16sp"
+                            android:inputType="text"
+                            android:completionThreshold="1" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/addMedicationButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Add"
+                        android:textSize="14sp"
+                        app:cornerRadius="8dp"
+                        app:backgroundTint="@color/primary_blue"
+                        android:textColor="@color/white"
+                        android:minWidth="80dp" />
+
+                </LinearLayout>
+
+                <!-- Medications List -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/medicationsRecyclerView"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
-                    android:hint="Medication Name"
-                    app:startIconDrawable="@drawable/ic_medical_services">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/medicationInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textSize="16sp"
-                        android:inputType="text" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <!-- Frequency -->
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:hint="Frequency (e.g., 3 times daily)"
-                    app:startIconDrawable="@drawable/ic_schedule">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/frequencyInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textSize="16sp"
-                        android:inputType="text" />
-
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <!-- Duration -->
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="12dp"
-                    android:hint="Duration (e.g., 7 days)"
-                    app:startIconDrawable="@drawable/ic_schedule">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/durationInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:textSize="16sp"
-                        android:inputType="text" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:nestedScrollingEnabled="false" />
 
                 <!-- Instructions -->
                 <com.google.android.material.textfield.TextInputLayout
@@ -155,12 +164,12 @@
 
                 </com.google.android.material.textfield.TextInputLayout>
 
-                <!-- Create Prescription Button -->
+                <!-- Write to Card Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/createPrescriptionButton"
                     android:layout_width="match_parent"
                     android:layout_height="56dp"
-                    android:text="Create Prescription"
+                    android:text="Write to Card"
                     android:textSize="16sp"
                     app:icon="@drawable/ic_save"
                     app:iconGravity="textStart"

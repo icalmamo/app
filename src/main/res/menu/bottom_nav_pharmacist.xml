@@ -11,14 +11,14 @@
         android:title="Dispense" />
     
     <item
+        android:id="@+id/nav_dispensed_history"
+        android:icon="@drawable/ic_history"
+        android:title="History" />
+    
+    <item
         android:id="@+id/nav_inventory"
         android:icon="@drawable/ic_inventory"
         android:title="Inventory" />
-    
-    <item
-        android:id="@+id/nav_prescription_verification"
-        android:icon="@drawable/ic_prescription_verification"
-        android:title="Verify" />
     
     <item
         android:id="@+id/nav_pharmacist_settings"
