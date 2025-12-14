@@ -13,43 +13,76 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Welcome Section - Modern Gradient Card -->
+        <!-- Welcome Card with MacBook Animation -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp"
-            app:cardBackgroundColor="@color/doctor_navy">
+            app:cardCornerRadius="20dp"
+            app:cardElevation="8dp"
+            app:strokeWidth="0dp">
 
-            <LinearLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="24dp"
-                android:background="@drawable/welcome_card_background">
+                android:background="@drawable/doctor_welcome_gradient">
+
+                <!-- Welcome Text -->
+                <TextView
+                    android:id="@+id/welcomeTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="24dp"
+                    android:text="Welcome Back,"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:alpha="0.9"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/macbookAnimation" />
 
                 <TextView
-                    android:id="@+id/welcomeTextView"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/doctorNameText"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Welcome, Doctor"
-                    android:textSize="24sp"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="4dp"
+                    android:text="Doctor"
+                    android:textColor="@color/white"
+                    android:textSize="22sp"
                     android:textStyle="bold"
-                    android:textColor="#1A1A1A"
-                    android:letterSpacing="0.02" />
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/welcomeTitle"
+                    app:layout_constraintEnd_toStartOf="@id/macbookAnimation" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/welcomeSubtitle"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="20dp"
                     android:layout_marginTop="8dp"
+                    android:layout_marginBottom="24dp"
                     android:text="Manage your patients and medical practice efficiently"
-                    android:textSize="15sp"
-                    android:textColor="#1A1A1A"
-                    android:alpha="0.8" />
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    android:alpha="0.8"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/doctorNameText"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/macbookAnimation" />
 
-            </LinearLayout>
+                <!-- MacBook Animation WebView -->
+                <WebView
+                    android:id="@+id/macbookAnimation"
+                    android:layout_width="140dp"
+                    android:layout_height="140dp"
+                    android:layout_marginEnd="8dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
         </com.google.android.material.card.MaterialCardView>
 

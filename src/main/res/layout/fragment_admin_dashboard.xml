@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F7FA"
+    android:background="@color/background_light"
     android:fillViewport="true"
     android:scrollbars="none">
 
@@ -13,199 +13,96 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Welcome Section - Purple Theme -->
+        <!-- Welcome Card with MacBook Animation -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="24dp"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp"
-            app:cardBackgroundColor="@color/admin_deep_purple">
+            app:cardCornerRadius="20dp"
+            app:cardElevation="8dp"
+            app:strokeWidth="0dp">
 
-            <LinearLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="24dp"
-                android:background="@drawable/admin_welcome_background"
-                android:gravity="center_horizontal">
+                android:background="@drawable/admin_welcome_gradient">
 
-                <!-- Logo -->
-                <ImageView
-                    android:layout_width="80dp"
-                    android:layout_height="80dp"
-                    android:layout_marginBottom="16dp"
-                    android:contentDescription="HCAS Logo"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/hcas_logo" />
+                <!-- Welcome Text -->
+                <TextView
+                    android:id="@+id/welcomeTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="24dp"
+                    android:text="Welcome Back,"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:alpha="0.9"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/macbookAnimation" />
 
                 <TextView
-                    android:id="@+id/welcomeTextView"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/adminNameText"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:text="Welcome to H-CAS Admin Dashboard"
-                    android:textSize="24sp"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="4dp"
+                    android:text="Administrator"
+                    android:textColor="@color/white"
+                    android:textSize="22sp"
                     android:textStyle="bold"
-                    android:textColor="#1A1A1A"
-                    android:letterSpacing="0.02" />
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/welcomeTitle"
+                    app:layout_constraintEnd_toStartOf="@id/macbookAnimation" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/welcomeSubtitle"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="20dp"
                     android:layout_marginTop="8dp"
+                    android:layout_marginBottom="24dp"
                     android:text="Manage your healthcare system efficiently"
-                    android:textSize="15sp"
-                    android:textColor="#1A1A1A"
-                    android:alpha="0.8" />
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    android:alpha="0.8"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@id/adminNameText"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/macbookAnimation" />
 
-            </LinearLayout>
+                <!-- MacBook Animation WebView -->
+                <WebView
+                    android:id="@+id/macbookAnimation"
+                    android:layout_width="140dp"
+                    android:layout_height="140dp"
+                    android:layout_marginEnd="8dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Quick Stats Section -->
-        <LinearLayout
-            android:layout_width="match_parent"
+        <!-- System Overview Header -->
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="20dp"
+            android:text="System Overview"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:letterSpacing="0.01" />
 
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="System Overview"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:textColor="#1A1A1A"
-                android:letterSpacing="0.01" />
-
-        </LinearLayout>
-
+        <!-- Statistics Grid -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/statsRecyclerView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="28dp"
             android:nestedScrollingEnabled="false" />
-
-        <!-- Quick Actions Section -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Quick Actions"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:textColor="#1A1A1A"
-                android:letterSpacing="0.01" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical">
-
-            <!-- Create Employee Button -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="2dp"
-                app:strokeWidth="0dp"
-                app:cardBackgroundColor="@color/white">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/createEmployeeButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="64dp"
-                    android:text="Create New Employee"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="#1A1A1A"
-                    android:letterSpacing="0.01"
-                    app:icon="@drawable/ic_add_user"
-                    app:iconGravity="textStart"
-                    app:iconTint="#1A1A1A"
-                    app:cornerRadius="14dp"
-                    app:backgroundTint="@color/admin_deep_purple"
-                    app:elevation="0dp"
-                    android:paddingStart="20dp"
-                    android:paddingEnd="20dp" />
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- View Employees Button -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="2dp"
-                app:strokeWidth="0dp"
-                app:cardBackgroundColor="@color/white">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/viewEmployeesButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="64dp"
-                    android:text="View All Employees"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/white"
-                    android:letterSpacing="0.01"
-                    app:icon="@drawable/ic_manage_users"
-                    app:iconGravity="textStart"
-                    app:iconTint="@color/white"
-                    app:cornerRadius="14dp"
-                    app:backgroundTint="@color/admin_deep_purple"
-                    app:elevation="0dp"
-                    android:paddingStart="20dp"
-                    android:paddingEnd="20dp" />
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Generate Reports Button -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="2dp"
-                app:strokeWidth="0dp"
-                app:cardBackgroundColor="@color/white">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/generateReportsButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="64dp"
-                    android:text="Generate Reports"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/white"
-                    android:letterSpacing="0.01"
-                    app:icon="@drawable/ic_reports"
-                    app:iconGravity="textStart"
-                    app:iconTint="@color/white"
-                    app:cornerRadius="14dp"
-                    app:backgroundTint="@color/admin_deep_purple"
-                    app:elevation="0dp"
-                    android:paddingStart="20dp"
-                    android:paddingEnd="20dp" />
-
-            </com.google.android.material.card.MaterialCardView>
-
-        </LinearLayout>
 
     </LinearLayout>
 

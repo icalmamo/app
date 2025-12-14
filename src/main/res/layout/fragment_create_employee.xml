@@ -67,7 +67,7 @@
                     android:text="Personal Information"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/primary_blue"
+                    android:textColor="@color/admin_deep_purple"
                     android:layout_marginBottom="16dp" />
 
                 <!-- First Name -->
@@ -78,11 +78,30 @@
                     android:layout_marginBottom="16dp"
                     android:hint="First Name"
                     app:startIconDrawable="@drawable/ic_person"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/firstNameEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPersonName" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Middle Name -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/middleNameLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:hint="Middle Name"
+                    app:startIconDrawable="@drawable/ic_person"
+                    app:startIconTint="@color/admin_deep_purple"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/middleNameEditText"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="textPersonName" />
@@ -97,7 +116,7 @@
                     android:layout_marginBottom="16dp"
                     android:hint="Last Name"
                     app:startIconDrawable="@drawable/ic_person"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -105,6 +124,28 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:inputType="textPersonName" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Date of Birth -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/dateOfBirthLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:hint="Date of Birth (YYYY-MM-DD)"
+                    app:startIconDrawable="@drawable/ic_calendar"
+                    app:startIconTint="@color/admin_deep_purple"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/dateOfBirthEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none"
+                        android:focusable="true"
+                        android:clickable="true"
+                        android:cursorVisible="false" />
 
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -116,7 +157,7 @@
                     android:layout_marginBottom="16dp"
                     android:hint="Email Address"
                     app:startIconDrawable="@drawable/ic_email"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -135,7 +176,7 @@
                     android:layout_marginBottom="24dp"
                     android:hint="Phone Number"
                     app:startIconDrawable="@drawable/ic_phone"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -153,7 +194,7 @@
                     android:text="Professional Information"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/primary_blue"
+                    android:textColor="@color/admin_deep_purple"
                     android:layout_marginBottom="16dp" />
 
                 <!-- Employee ID -->
@@ -164,7 +205,7 @@
                     android:layout_marginBottom="16dp"
                     android:hint="Employee ID"
                     app:startIconDrawable="@drawable/ic_badge"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -186,7 +227,7 @@
                     android:layout_marginBottom="24dp"
                     android:hint="Select Role"
                     app:startIconDrawable="@drawable/ic_work"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
@@ -204,7 +245,7 @@
                     android:text="Account Information"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/primary_blue"
+                    android:textColor="@color/admin_deep_purple"
                     android:layout_marginBottom="16dp" />
 
                 <!-- Username -->
@@ -215,7 +256,7 @@
                     android:layout_marginBottom="16dp"
                     android:hint="Username"
                     app:startIconDrawable="@drawable/ic_person"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -234,9 +275,9 @@
                     android:layout_marginBottom="24dp"
                     android:hint="Password"
                     app:startIconDrawable="@drawable/ic_lock"
-                    app:startIconTint="@color/primary_blue"
+                    app:startIconTint="@color/admin_deep_purple"
                     app:endIconMode="password_toggle"
-                    app:endIconTint="@color/primary_blue"
+                    app:endIconTint="@color/admin_deep_purple"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                     <com.google.android.material.textfield.TextInputEditText
@@ -256,7 +297,7 @@
                     android:textSize="16sp"
                     android:textStyle="bold"
                     app:cornerRadius="8dp"
-                    app:backgroundTint="@color/primary_blue"
+                    app:backgroundTint="@color/admin_deep_purple"
                     android:textColor="@color/white" />
 
             </LinearLayout>

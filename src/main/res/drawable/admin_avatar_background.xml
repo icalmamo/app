@@ -6,9 +6,6 @@
     
     <stroke
         android:width="3dp"
-        android:color="@color/primary_blue" />
+        android:color="@color/admin_deep_purple" />
         
 </shape>
-
-
-

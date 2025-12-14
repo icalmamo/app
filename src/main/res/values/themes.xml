@@ -15,4 +15,55 @@
         <item name="android:statusBarColor">@color/white</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+    
+    <!-- Admin Navigation Bar Styles - Floating White Style (Icon Only) -->
+    <style name="AdminNavTextActive" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">0sp</item>
+        <item name="android:textColor">@android:color/transparent</item>
+    </style>
+    
+    <style name="AdminNavTextInactive" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">0sp</item>
+        <item name="android:textColor">@android:color/transparent</item>
+    </style>
+    
+    <style name="AdminNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:width">48dp</item>
+        <item name="android:height">36dp</item>
+        <item name="android:color">#E8F5E9</item>
+        <item name="shapeAppearance">@style/AdminNavIndicatorShape</item>
+    </style>
+    
+    <style name="AdminNavIndicatorShape" parent="ShapeAppearance.Material3.Corner.Full">
+        <item name="cornerSize">18dp</item>
+    </style>
+    
+    <!-- Nurse Navigation Bar Styles - Floating White Style (Icon Only) -->
+    <style name="NurseNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:width">48dp</item>
+        <item name="android:height">36dp</item>
+        <item name="android:color">#E0F7FA</item>
+        <item name="shapeAppearance">@style/NavIndicatorShape</item>
+    </style>
+    
+    <!-- Doctor Navigation Bar Styles - Floating White Style (Icon Only) -->
+    <style name="DoctorNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:width">48dp</item>
+        <item name="android:height">36dp</item>
+        <item name="android:color">#E3F2FD</item>
+        <item name="shapeAppearance">@style/NavIndicatorShape</item>
+    </style>
+    
+    <!-- Pharmacist Navigation Bar Styles - Floating White Style (Icon Only) -->
+    <style name="PharmacistNavActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:width">48dp</item>
+        <item name="android:height">36dp</item>
+        <item name="android:color">#E8F5E9</item>
+        <item name="shapeAppearance">@style/NavIndicatorShape</item>
+    </style>
+    
+    <!-- Shared Nav Indicator Shape -->
+    <style name="NavIndicatorShape" parent="ShapeAppearance.Material3.Corner.Full">
+        <item name="cornerSize">18dp</item>
+    </style>
 </resources>

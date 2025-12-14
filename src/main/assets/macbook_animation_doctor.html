@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MacBook Animation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        .macbook {
+            width: 150px;
+            height: 96px;
+            position: relative;
+            perspective: 450px;
+        }
+
+        .background-logo {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+            color: rgba(66, 165, 245, 0.08);
+            font-size: 80px;
+            font-weight: 900;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            letter-spacing: 8px;
+            white-space: nowrap;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(66, 165, 245, 0.1);
+        }
+
+        .shadow {
+            position: absolute;
+            width: 55px;
+            height: 0px;
+            left: 42px;
+            top: 160px;
+            transform: rotateX(80deg);
+            box-shadow: 0 0 50px 35px rgba(66, 165, 245, 0.18);
+            animation: shadow infinite 8s ease;
+        }
+
+        .inner {
+            z-index: 10;
+            position: absolute;
+            width: 150px;
+            height: 96px;
+            left: 0;
+            top: 0;
+            transform-style: preserve-3d;
+            transform: rotateX(-18deg) rotateY(0deg);
+            animation: rotate infinite 8s ease;
+        }
+
+        .screen {
+            width: 150px;
+            height: 96px;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            border-radius: 7px;
+            background: #E3F2FD;
+            transform-style: preserve-3d;
+            transform-origin: 50% 93px;
+            transform: rotateX(0deg);
+            animation: lid-screen infinite 8s ease;
+            background-image: linear-gradient(135deg, rgba(66, 165, 245, 0.12) 0%, transparent 100%);
+            box-shadow: inset 0 2px 6px rgba(255,255,255,0.45);
+        }
+
+        .screen .face-one {
+            width: 150px;
+            height: 96px;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            border-radius: 7px;
+            background: #BBDEFB;
+            transform: translateZ(2px);
+            background-image: linear-gradient(45deg, rgba(66, 165, 245, 0.12) 0%, rgba(0,0,0,0) 100%);
+        }
+
+        .screen .face-two {
+            width: 150px;
+            height: 96px;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            border-radius: 7px;
+            background: #c8e6c9;
+            transform: translateZ(-2px) rotateY(180deg);
+            background-image: linear-gradient(45deg, rgba(46, 125, 50, 0.12) 0%, rgba(0,0,0,0) 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .screen .face-two .brand-name {
+            color: #42A5F5;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            letter-spacing: 3px;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+        }
+
+        .screen .face-one .camera {
+            width: 3px;
+            height: 3px;
+            border-radius: 100%;
+            background: #1565C0;
+            position: absolute;
+            left: 50%;
+            top: 4px;
+            margin-left: -1.5px;
+        }
+
+        .screen .face-one .display {
+            width: 130px;
+            height: 74px;
+            margin: 10px;
+            background: linear-gradient(135deg, #1565C0 0%, #42A5F5 50%, #64B5F6 100%);
+            background-size: 100% 100%;
+            border-radius: 1px;
+            position: relative;
+            box-shadow: inset 0 0 2px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .screen .face-one .display .app-logo {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            z-index: 2;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+
+        .screen .face-one .display .shade {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 130px;
+            height: 74px;
+            background: linear-gradient(-135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+            animation: screen-shade infinite 8s ease;
+            z-index: 3;
+        }
+
+
+        .screen .face-one span {
+            position: absolute;
+            top: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 6px;
+            color: #42A5F5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-weight: 500;
+        }
+
+        .macbody {
+            width: 150px;
+            height: 96px;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            border-radius: 7px;
+            background: #90CAF9;
+            transform-style: preserve-3d;
+            transform-origin: 50% bottom;
+            transform: rotateX(-90deg);
+            animation: lid-macbody infinite 7s ease;
+            background-image: linear-gradient(45deg, rgba(66, 165, 245, 0.15) 0%, rgba(0,0,0,0) 100%);
+        }
+
+        .macbody .face-one {
+            width: 150px;
+            height: 96px;
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            border-radius: 7px;
+            transform-style: preserve-3d;
+            background: #c8e6c9;
+            transform: translateZ(-2px);
+            background-image: linear-gradient(30deg, rgba(46, 125, 50, 0.12) 0%, rgba(0,0,0,0) 100%);
+        }
+
+        .macbody .touchpad {
+            width: 40px;
+            height: 31px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            border-radius: 4px;
+            margin: -44px 0 0 -18px;
+            background: #64B5F6;
+            background-image: linear-gradient(30deg, rgba(66, 165, 245, 0.15) 0%, rgba(0,0,0,0) 100%);
+            box-shadow: inset 0 0 3px #42A5F5;
+        }
+
+        .macbody .keyboard {
+            width: 130px;
+            height: 45px;
+            position: absolute;
+            left: 7px;
+            top: 41px;
+            border-radius: 4px;
+            transform-style: preserve-3d;
+            background: #64B5F6;
+            background-image: linear-gradient(30deg, rgba(66, 165, 245, 0.15) 0%, rgba(0,0,0,0) 100%);
+            box-shadow: inset 0 0 3px #42A5F5;
+            padding: 0 0 0 2px;
+        }
+
+        .keyboard .key {
+            width: 6px;
+            height: 6px;
+            background: #42A5F5;
+            float: left;
+            margin: 1px;
+            transform: translateZ(-2px);
+            border-radius: 2px;
+            box-shadow: 0 -1px 0 #1565C0;
+        }
+
+        .key.space {
+            width: 45px;
+        }
+
+        .key.f {
+            height: 3px;
+        }
+
+        .macbody .pad {
+            width: 5px;
+            height: 5px;
+            background: #1565C0;
+            border-radius: 100%;
+            position: absolute;
+        }
+
+        .pad.one { left: 20px; top: 20px; }
+        .pad.two { right: 20px; top: 20px; }
+        .pad.three { right: 20px; bottom: 20px; }
+        .pad.four { left: 20px; bottom: 20px; }
+
+        @keyframes rotate {
+            0% { transform: rotateX(-18deg) rotateY(0deg); }
+            25% { transform: rotateX(-18deg) rotateY(90deg); }
+            50% { transform: rotateX(-18deg) rotateY(180deg); }
+            75% { transform: rotateX(-18deg) rotateY(270deg); }
+            100% { transform: rotateX(-18deg) rotateY(360deg); }
+        }
+
+        @keyframes lid-screen {
+            0%, 60%, 100% { transform: rotateX(0deg); }
+            30% { transform: rotateX(-70deg); }
+        }
+
+        @keyframes lid-macbody {
+            0%, 100% { transform: rotateX(-90deg); }
+        }
+
+        @keyframes screen-shade {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+
+        @keyframes shadow {
+            0%, 100% { transform: rotateX(80deg);             box-shadow: 0 0 50px 35px rgba(66, 165, 245, 0.18); }
+            50% { transform: rotateX(75deg); box-shadow: 0 0 40px 30px rgba(66, 165, 245, 0.15); }
+        }
+    </style>
+</head>
+<body>
+    <div class="macbook">
+        <div class="background-logo">H-CAS</div>
+        <div class="inner">
+            <div class="screen">
+                <div class="face-one">
+                    <div class="camera"></div>
+                    <div class="display">
+                        <img src="hcas_logo.png" alt="H-CAS" class="app-logo">
+                        <div class="shade"></div>
+                    </div>
+                    <span>Healthcare Doctor</span>
+                </div>
+                <div class="face-two">
+                    <span class="brand-name">HCAS</span>
+                </div>
+            </div>
+            <div class="macbody">
+                <div class="face-one">
+                    <div class="touchpad"></div>
+                    <div class="keyboard">
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key space"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key"></div><div class="key"></div><div class="key"></div><div class="key"></div>
+                        <div class="key f"></div><div class="key f"></div><div class="key f"></div><div class="key f"></div>
+                        <div class="key f"></div><div class="key f"></div><div class="key f"></div><div class="key f"></div>
+                        <div class="key f"></div><div class="key f"></div><div class="key f"></div><div class="key f"></div>
+                        <div class="key f"></div><div class="key f"></div><div class="key f"></div><div class="key f"></div>
+                    </div>
+                </div>
+                <div class="pad one"></div>
+                <div class="pad two"></div>
+                <div class="pad three"></div>
+                <div class="pad four"></div>
+            </div>
+        </div>
+        <div class="shadow"></div>
+    </div>
+</body>
+</html>
+

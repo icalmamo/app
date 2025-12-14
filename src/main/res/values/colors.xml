@@ -14,10 +14,10 @@
     <color name="doctor_navy_dark">#42A5F5</color>
     <color name="doctor_white_accent">#FFFFFF</color>
     
-    <!-- Admin Theme - Grey + White -->
-    <color name="admin_deep_purple">#757575</color>
-    <color name="admin_deep_purple_light">#BDBDBD</color>
-    <color name="admin_deep_purple_dark">#616161</color>
+    <!-- Admin Theme - Green + White -->
+    <color name="admin_deep_purple">#2E7D32</color>
+    <color name="admin_deep_purple_light">#66BB6A</color>
+    <color name="admin_deep_purple_dark">#1B5E20</color>
     <color name="admin_white_accent">#FFFFFF</color>
     
     <!-- Nurse Theme - Light Teal + White -->
@@ -58,6 +58,7 @@
     <!-- Bottom Navigation Colors (used in color selector) -->
     <color name="bottom_nav_item_selected">#1976D2</color>
     <color name="doctor_bottom_nav_selected">#000435</color>
+    <color name="admin_bottom_nav_selected">#2E7D32</color>
     
     <!-- Notification Dropdown Colors -->
     <color name="primary_blue_light">#E3F2FD</color>
